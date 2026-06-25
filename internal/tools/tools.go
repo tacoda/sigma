@@ -1,0 +1,64 @@
+// Package tools defines the tool interface and registry the agent dispatches to.
+package tools
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/tacoda/sigma/internal/anthropic"
+)
+
+// Tool is one capability the agent can invoke.
+type Tool interface {
+	Name() string
+	Description() string
+	Schema() json.RawMessage
+	// ReadOnly reports whether the tool mutates state. Read-only tools bypass
+	// the permission gate.
+	ReadOnly() bool
+	Run(ctx context.Context, input json.RawMessage) (string, error)
+}
+
+// Registry holds the available tools.
+type Registry struct {
+	tools map[string]Tool
+}
+
+// NewRegistry builds a registry from the given tools.
+func NewRegistry(ts ...Tool) *Registry {
+	m := make(map[string]Tool, len(ts))
+	for _, t := range ts {
+		m[t.Name()] = t
+	}
+	return &Registry{tools: m}
+}
+
+// Defs returns the API tool definitions.
+func (r *Registry) Defs() []anthropic.Tool {
+	defs := make([]anthropic.Tool, 0, len(r.tools))
+	for _, t := range r.tools {
+		defs = append(defs, anthropic.Tool{
+			Name:        t.Name(),
+			Description: t.Description(),
+			InputSchema: t.Schema(),
+		})
+	}
+	return defs
+}
+
+// Run dispatches to a tool by name.
+func (r *Registry) Run(ctx context.Context, name string, input json.RawMessage) (string, error) {
+	t, ok := r.tools[name]
+	if !ok {
+		return "", fmt.Errorf("unknown tool: %s", name)
+	}
+	return t.Run(ctx, input)
+}
+
+// ReadOnly reports whether the named tool is read-only (unknown tools are
+// treated as mutating, i.e. not read-only).
+func (r *Registry) ReadOnly(name string) bool {
+	t, ok := r.tools[name]
+	return ok && t.ReadOnly()
+}
