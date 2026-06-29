@@ -85,6 +85,9 @@ func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.pending != nil {
 			m.pending.reply <- askReply{}
 		}
+		if m.bridge.cancel != nil {
+			m.bridge.cancel() // stop any in-flight request/tool before exit
+		}
 		return m, tea.Quit
 	}
 	if m.pending != nil {
@@ -173,10 +176,14 @@ func (m model) helpText() string {
 }
 
 // startTurn runs one agent turn in a goroutine, signalling completion via Send.
+// The turn's context is stored on the bridge so ctrl+c can cancel it.
 func (m model) startTurn(input string) tea.Cmd {
 	a, b := m.agent, m.bridge
+	ctx, cancel := context.WithCancel(context.Background())
+	b.cancel = cancel
 	return func() tea.Msg {
-		err := a.Run(context.Background(), input)
+		defer cancel()
+		err := a.Run(ctx, input)
 		b.prog.Send(doneMsg{err: err})
 		return nil
 	}

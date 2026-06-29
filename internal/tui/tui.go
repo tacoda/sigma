@@ -7,6 +7,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -33,7 +34,8 @@ type askMsg struct {
 // bridge connects the agent goroutine to the Bubble Tea program.
 type bridge struct {
 	prog    *tea.Program
-	session map[string]bool // tools approved for the session
+	session map[string]bool    // tools approved for the session
+	cancel  context.CancelFunc // cancels the in-flight turn, if any
 }
 
 func (b *bridge) Text(delta string)        { b.prog.Send(textMsg(delta)) }

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/tacoda/sigma/internal/agent"
@@ -224,7 +225,10 @@ func runAgent(args []string) {
 	base.Tools = agent.WithSubagent(base, d.childTools)
 	base.UI = consoleUI{}
 	a := agent.New(base)
-	err := a.Run(context.Background(), strings.Join(args, " "))
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	err := a.Run(ctx, strings.Join(args, " "))
 	fmt.Println()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "run failed:", err)

@@ -3,6 +3,7 @@ package anthropic
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 )
@@ -26,6 +27,10 @@ type sseEvent struct {
 	Usage *struct {
 		OutputTokens int `json:"output_tokens"`
 	} `json:"usage"`
+	Error *struct {
+		Type    string `json:"type"`
+		Message string `json:"message"`
+	} `json:"error"`
 }
 
 // streamState accumulates blocks across SSE events.
@@ -51,10 +56,13 @@ func parseStream(body io.Reader, onText func(string)) (*Result, error) {
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
 			return nil, err
 		}
-		if ev.Type == "message_stop" {
+		stop, err := s.handle(ev)
+		if err != nil {
+			return nil, err
+		}
+		if stop {
 			break
 		}
-		s.apply(ev)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
@@ -62,6 +70,30 @@ func parseStream(body io.Reader, onText func(string)) (*Result, error) {
 
 	s.result.Content = s.blocks
 	return &s.result, nil
+}
+
+// handle processes one event. It reports stop=true on message_stop and returns
+// an error for an error event; other events are applied to the stream state.
+func (s *streamState) handle(ev sseEvent) (stop bool, err error) {
+	switch ev.Type {
+	case "error":
+		return false, streamError(ev.Error)
+	case "message_stop":
+		return true, nil
+	default:
+		s.apply(ev)
+		return false, nil
+	}
+}
+
+func streamError(e *struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}) error {
+	if e == nil {
+		return fmt.Errorf("stream error")
+	}
+	return fmt.Errorf("stream error (%s): %s", e.Type, e.Message)
 }
 
 func (s *streamState) apply(ev sseEvent) {

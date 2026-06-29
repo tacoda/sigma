@@ -5,12 +5,17 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/tacoda/sigma/internal/anthropic"
 	"github.com/tacoda/sigma/internal/tools"
 )
 
 const maxTokens = 4096
+
+// maxIterations bounds the tool-use loop so a model stuck calling tools cannot
+// run unbounded API requests.
+const maxIterations = 50
 
 var (
 	errDenied  = errors.New("denied by user")
@@ -30,6 +35,12 @@ type Approver interface {
 	Allow(name, detail string) bool
 }
 
+// Streamer sends a Messages request and streams the response. *anthropic.Client
+// satisfies it; tests supply a fake.
+type Streamer interface {
+	Stream(ctx context.Context, req anthropic.Request, onText func(string)) (*anthropic.Result, error)
+}
+
 // Hooks fire around tool execution. A blocking PreTool stops the tool.
 type Hooks interface {
 	PreTool(name, input string) (block bool, reason string)
@@ -38,7 +49,7 @@ type Hooks interface {
 
 // Config holds an agent's collaborators.
 type Config struct {
-	Client   *anthropic.Client
+	Client   Streamer
 	Tools    *tools.Registry
 	Approver Approver
 	UI       UI
@@ -75,7 +86,10 @@ func (a *Agent) Reset() { a.messages = nil }
 func (a *Agent) Run(ctx context.Context, input string) error {
 	a.messages = append(a.messages, anthropic.UserText(input))
 
-	for {
+	for i := 0; i < maxIterations; i++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		result, err := a.cfg.Client.Stream(ctx, anthropic.Request{
 			Model:     a.cfg.Model,
 			MaxTokens: maxTokens,
@@ -96,6 +110,7 @@ func (a *Agent) Run(ctx context.Context, input string) error {
 			Content: a.runTools(ctx, result.ToolUses()),
 		})
 	}
+	return fmt.Errorf("exceeded max tool iterations (%d)", maxIterations)
 }
 
 // runTools executes each requested tool and returns the tool_result blocks.
