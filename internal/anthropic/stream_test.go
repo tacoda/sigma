@@ -58,3 +58,17 @@ func TestParseStream(t *testing.T) {
 		t.Errorf("input = %s", uses[0].Input)
 	}
 }
+
+func TestParseStreamErrorEvent(t *testing.T) {
+	const stream = `data: {"type":"message_start","message":{"usage":{"input_tokens":10}}}
+
+data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
+`
+	_, err := parseStream(strings.NewReader(stream), nil)
+	if err == nil {
+		t.Fatal("want error from error event, got nil")
+	}
+	if !strings.Contains(err.Error(), "Overloaded") {
+		t.Errorf("err = %v, want it to contain %q", err, "Overloaded")
+	}
+}
