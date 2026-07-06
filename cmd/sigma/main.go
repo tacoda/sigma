@@ -19,6 +19,7 @@ import (
 	"github.com/tacoda/sigma/internal/permission"
 	"github.com/tacoda/sigma/internal/prompt"
 	"github.com/tacoda/sigma/internal/rules"
+	"github.com/tacoda/sigma/internal/session"
 	"github.com/tacoda/sigma/internal/skills"
 	"github.com/tacoda/sigma/internal/tools"
 	"github.com/tacoda/sigma/internal/tui"
@@ -254,6 +255,7 @@ func runChat(args []string) {
 		Allowed:    d.allowed,
 		Model:      d.model,
 		System:     d.system,
+		Store:      session.Store{},
 		Resume:     resume,
 	}
 	if err := tui.Run(cfg); err != nil {

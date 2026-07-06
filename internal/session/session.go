@@ -1,10 +1,12 @@
 // Package session persists a conversation to disk so it can be resumed.
 //
-// One session per project, stored at ./.sigma/session.json.
+// One session per project, stored at ./.sigma/session.json. Store is the
+// default file-backed adapter.
 package session
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -13,14 +15,27 @@ import (
 
 func path() string { return filepath.Join(".sigma", "session.json") }
 
-// Exists reports whether a saved session is present.
-func Exists() bool {
-	_, err := os.Stat(path())
-	return err == nil
+// Store is a file-backed conversation store.
+type Store struct{}
+
+// Load reads the saved conversation. The bool is false when no session exists.
+func (Store) Load() ([]message.Message, bool, error) {
+	data, err := os.ReadFile(path())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	var messages []message.Message
+	if err := json.Unmarshal(data, &messages); err != nil {
+		return nil, false, err
+	}
+	return messages, true, nil
 }
 
 // Save writes the conversation history.
-func Save(messages []message.Message) error {
+func (Store) Save(messages []message.Message) error {
 	if err := os.MkdirAll(filepath.Dir(path()), 0o755); err != nil {
 		return err
 	}
@@ -29,17 +44,4 @@ func Save(messages []message.Message) error {
 		return err
 	}
 	return os.WriteFile(path(), data, 0o644)
-}
-
-// Load reads the saved conversation history.
-func Load() ([]message.Message, error) {
-	data, err := os.ReadFile(path())
-	if err != nil {
-		return nil, err
-	}
-	var messages []message.Message
-	if err := json.Unmarshal(data, &messages); err != nil {
-		return nil, err
-	}
-	return messages, nil
 }

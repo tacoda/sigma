@@ -16,9 +16,15 @@ import (
 
 	"github.com/tacoda/sigma/internal/agent"
 	"github.com/tacoda/sigma/internal/commands"
-	"github.com/tacoda/sigma/internal/session"
+	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/tools"
 )
+
+// SessionStore persists the conversation so a session can be resumed.
+type SessionStore interface {
+	Load() ([]message.Message, bool, error)
+	Save([]message.Message) error
+}
 
 // shortCWD is the current directory's base name, for the status line.
 func shortCWD() string {
@@ -87,6 +93,7 @@ type Config struct {
 	Allowed    []string
 	Model      string
 	System     string
+	Store      SessionStore
 	Resume     bool
 }
 
@@ -109,8 +116,9 @@ func Run(cfg Config) error {
 	m := newModel(a, b, commands.Load())
 	m.modelName = cfg.Model
 	m.cwd = shortCWD()
-	if cfg.Resume {
-		if msgs, err := session.Load(); err == nil {
+	m.store = cfg.Store
+	if cfg.Resume && m.store != nil {
+		if msgs, ok, err := m.store.Load(); err == nil && ok {
 			a.Restore(msgs)
 			m.transcript = noteStyle.Render(fmt.Sprintf("(resumed %d messages)", len(msgs))) + "\n"
 		}

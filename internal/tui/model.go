@@ -13,7 +13,6 @@ import (
 
 	"github.com/tacoda/sigma/internal/agent"
 	"github.com/tacoda/sigma/internal/commands"
-	"github.com/tacoda/sigma/internal/session"
 )
 
 const maxInputHeight = 6
@@ -41,6 +40,7 @@ type model struct {
 	history []string // past submitted lines, oldest first
 	histIdx int      // cursor into history; == len(history) means "new line"
 
+	store         SessionStore
 	modelName     string
 	cwd           string
 	tokIn, tokOut int
@@ -125,7 +125,9 @@ func (m model) onDone(msg doneMsg) model {
 		m.transcript += errStyle.Render("  ✗ error: "+msg.err.Error()) + "\n"
 	}
 	m.busy = false
-	_ = session.Save(m.agent.Snapshot()) // best-effort autosave
+	if m.store != nil {
+		_ = m.store.Save(m.agent.Snapshot()) // best-effort autosave
+	}
 	m.refresh()
 	return m
 }
