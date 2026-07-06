@@ -192,10 +192,7 @@ func buildDeps() deps {
 		model = cfg.Model
 	}
 
-	childTools := []tools.Tool{
-		tools.ReadFile{}, tools.WriteFile{}, tools.EditFile{},
-		tools.Bash{}, tools.Glob{}, tools.Grep{}, tools.Worktree{},
-	}
+	childTools := tools.FS("")
 	sources := []prompt.Source{rules.Source{}}
 	if sk := skills.Load(); len(sk) > 0 {
 		childTools = append(childTools, skills.NewTool(sk))

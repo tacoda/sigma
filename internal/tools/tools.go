@@ -20,6 +20,16 @@ type Tool interface {
 	Run(ctx context.Context, input json.RawMessage) (string, error)
 }
 
+// FS returns the standard tool set. A non-empty root confines the file tools
+// (read/write/edit/glob/grep) under it — for worktree isolation — while bash
+// and worktree operate from the process cwd.
+func FS(root string) []Tool {
+	return []Tool{
+		ReadFile{Root: root}, WriteFile{Root: root}, EditFile{Root: root},
+		Bash{}, Glob{Root: root}, Grep{Root: root}, Worktree{},
+	}
+}
+
 // Registry holds the available tools.
 type Registry struct {
 	tools map[string]Tool

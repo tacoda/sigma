@@ -9,8 +9,8 @@ import (
 )
 
 // EditFile replaces an exact string in a file. old_string must be unique unless
-// replace_all is set.
-type EditFile struct{}
+// replace_all is set. Root, if set, confines edits under it.
+type EditFile struct{ Root string }
 
 func (EditFile) Name() string { return "edit_file" }
 
@@ -33,7 +33,7 @@ func (EditFile) Schema() json.RawMessage {
 	}`)
 }
 
-func (EditFile) Run(_ context.Context, input json.RawMessage) (string, error) {
+func (e EditFile) Run(_ context.Context, input json.RawMessage) (string, error) {
 	var args struct {
 		Path       string `json:"path"`
 		OldString  string `json:"old_string"`
@@ -46,7 +46,11 @@ func (EditFile) Run(_ context.Context, input json.RawMessage) (string, error) {
 	if args.Path == "" || args.OldString == "" {
 		return "", fmt.Errorf("path and old_string are required")
 	}
-	data, err := os.ReadFile(args.Path)
+	path, err := rooted(e.Root, args.Path)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
@@ -58,7 +62,7 @@ func (EditFile) Run(_ context.Context, input json.RawMessage) (string, error) {
 	}
 
 	updated := strings.ReplaceAll(content, args.OldString, args.NewString)
-	if err := os.WriteFile(args.Path, []byte(updated), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("replaced %d occurrence(s) in %s", n, args.Path), nil

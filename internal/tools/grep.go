@@ -14,8 +14,9 @@ import (
 
 const maxGrepMatches = 100
 
-// Grep searches file contents with a regular expression.
-type Grep struct{}
+// Grep searches file contents with a regular expression. Root, if set, confines
+// the search under it and returns paths relative to it.
+type Grep struct{ Root string }
 
 func (Grep) Name() string { return "grep" }
 
@@ -36,7 +37,7 @@ func (Grep) Schema() json.RawMessage {
 	}`)
 }
 
-func (Grep) Run(_ context.Context, input json.RawMessage) (string, error) {
+func (g Grep) Run(_ context.Context, input json.RawMessage) (string, error) {
 	var args struct {
 		Pattern string `json:"pattern"`
 		Path    string `json:"path"`
@@ -48,12 +49,16 @@ func (Grep) Run(_ context.Context, input json.RawMessage) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid pattern: %w", err)
 	}
-	root := args.Path
-	if root == "" {
-		root = "."
+	sub := args.Path
+	if sub == "" {
+		sub = "."
+	}
+	dir, err := rooted(g.Root, sub)
+	if err != nil {
+		return "", err
 	}
 
-	matches, err := search(root, re)
+	matches, err := search(dir, re, g.Root)
 	if err != nil {
 		return "", err
 	}
@@ -63,17 +68,18 @@ func (Grep) Run(_ context.Context, input json.RawMessage) (string, error) {
 	return strings.Join(matches, "\n"), nil
 }
 
-// search walks root, collecting matches up to maxGrepMatches.
-func search(root string, re *regexp.Regexp) ([]string, error) {
+// search walks dir, collecting matches up to maxGrepMatches, with paths shown
+// relative to root.
+func search(dir string, re *regexp.Regexp, root string) ([]string, error) {
 	var matches []string
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		switch {
 		case err != nil:
 			return nil // skip unreadable entries
 		case d.IsDir():
 			return skipUnwanted(d.Name())
 		}
-		matches = append(matches, grepFile(path, re, maxGrepMatches-len(matches))...)
+		matches = append(matches, grepFile(path, re, maxGrepMatches-len(matches), root)...)
 		if len(matches) >= maxGrepMatches {
 			return filepath.SkipAll
 		}
@@ -93,7 +99,7 @@ func skipDir(name string) bool {
 	return name == ".git" || name == "node_modules" || (strings.HasPrefix(name, ".") && name != ".")
 }
 
-func grepFile(path string, re *regexp.Regexp, limit int) []string {
+func grepFile(path string, re *regexp.Regexp, limit int, root string) []string {
 	if limit <= 0 {
 		return nil
 	}
@@ -103,12 +109,13 @@ func grepFile(path string, re *regexp.Regexp, limit int) []string {
 	}
 	defer f.Close()
 
+	display := unrooted(root, path)
 	var out []string
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for line := 1; scanner.Scan(); line++ {
 		if re.MatchString(scanner.Text()) {
-			out = append(out, fmt.Sprintf("%s:%d:%s", path, line, scanner.Text()))
+			out = append(out, fmt.Sprintf("%s:%d:%s", display, line, scanner.Text()))
 			if len(out) >= limit {
 				break
 			}

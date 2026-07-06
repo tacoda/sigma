@@ -11,8 +11,8 @@ import (
 // ponytail: flat byte cap; add offset/limit windowing in Phase 3 if needed.
 const maxReadBytes = 256 * 1024
 
-// ReadFile reads a file's contents.
-type ReadFile struct{}
+// ReadFile reads a file's contents. Root, if set, confines reads under it.
+type ReadFile struct{ Root string }
 
 func (ReadFile) Name() string { return "read_file" }
 
@@ -32,7 +32,7 @@ func (ReadFile) Schema() json.RawMessage {
 	}`)
 }
 
-func (ReadFile) Run(_ context.Context, input json.RawMessage) (string, error) {
+func (r ReadFile) Run(_ context.Context, input json.RawMessage) (string, error) {
 	var args struct {
 		Path string `json:"path"`
 	}
@@ -42,7 +42,11 @@ func (ReadFile) Run(_ context.Context, input json.RawMessage) (string, error) {
 	if args.Path == "" {
 		return "", fmt.Errorf("path is required")
 	}
-	data, err := os.ReadFile(args.Path)
+	path, err := rooted(r.Root, args.Path)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
