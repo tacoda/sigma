@@ -1,0 +1,47 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "please echo hello"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I'll echo that."
+      },
+      {
+        "type": "tool_use",
+        "id": "t1",
+        "name": "echo",
+        "input": {
+          "msg": "hello"
+        }
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "tool_result",
+        "tool_use_id": "t1",
+        "content": "hello"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Done: hello"
+      }
+    ]
+  }
+]
