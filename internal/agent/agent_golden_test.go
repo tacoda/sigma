@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/tacoda/sigma/internal/agent"
-	"github.com/tacoda/sigma/internal/anthropic"
+	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/tools"
 )
 
@@ -20,7 +20,7 @@ var update = flag.Bool("update", false, "update golden files")
 // answer. The full message transcript is compared against a golden fixture so
 // the Phase 1 ports refactor can prove it changed nothing.
 func TestRunGolden(t *testing.T) {
-	streamer := &fakeStreamer{script: []*anthropic.Result{
+	streamer := &fakeStreamer{script: []*message.Result{
 		toolUseResult("I'll echo that.", "t1", "echo", `{"msg":"hello"}`),
 		endTurnResult("Done: hello"),
 	}}

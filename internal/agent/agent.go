@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/tacoda/sigma/internal/anthropic"
+	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/tools"
 )
 
@@ -35,10 +35,10 @@ type Approver interface {
 	Allow(name, detail string) bool
 }
 
-// Streamer sends a Messages request and streams the response. *anthropic.Client
+// LLM is the model port: send a request, stream the response. *anthropic.Client
 // satisfies it; tests supply a fake.
-type Streamer interface {
-	Stream(ctx context.Context, req anthropic.Request, onText func(string)) (*anthropic.Result, error)
+type LLM interface {
+	Stream(ctx context.Context, req message.Request, onText func(string)) (*message.Result, error)
 }
 
 // Hooks fire around tool execution. A blocking PreTool stops the tool.
@@ -49,7 +49,7 @@ type Hooks interface {
 
 // Config holds an agent's collaborators.
 type Config struct {
-	Client   Streamer
+	Client   LLM
 	Tools    *tools.Registry
 	Approver Approver
 	UI       UI
@@ -61,7 +61,7 @@ type Config struct {
 // Agent holds conversation state across turns.
 type Agent struct {
 	cfg      Config
-	messages []anthropic.Message
+	messages []message.Message
 }
 
 // New creates an agent. A nil Hooks is replaced with a no-op.
@@ -73,10 +73,10 @@ func New(cfg Config) *Agent {
 }
 
 // Snapshot returns the conversation history (for persistence).
-func (a *Agent) Snapshot() []anthropic.Message { return a.messages }
+func (a *Agent) Snapshot() []message.Message { return a.messages }
 
 // Restore replaces the conversation history (for resume).
-func (a *Agent) Restore(m []anthropic.Message) { a.messages = m }
+func (a *Agent) Restore(m []message.Message) { a.messages = m }
 
 // Reset clears the conversation history, starting a fresh session.
 func (a *Agent) Reset() { a.messages = nil }
@@ -84,13 +84,13 @@ func (a *Agent) Reset() { a.messages = nil }
 // Run processes one user input, looping through any tool calls until the model
 // produces a final answer.
 func (a *Agent) Run(ctx context.Context, input string) error {
-	a.messages = append(a.messages, anthropic.UserText(input))
+	a.messages = append(a.messages, message.UserText(input))
 
 	for i := 0; i < maxIterations; i++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		result, err := a.cfg.Client.Stream(ctx, anthropic.Request{
+		result, err := a.cfg.Client.Stream(ctx, message.Request{
 			Model:     a.cfg.Model,
 			MaxTokens: maxTokens,
 			System:    a.cfg.System,
@@ -100,12 +100,12 @@ func (a *Agent) Run(ctx context.Context, input string) error {
 		if err != nil {
 			return err
 		}
-		a.messages = append(a.messages, anthropic.Message{Role: "assistant", Content: result.Content})
+		a.messages = append(a.messages, message.Message{Role: "assistant", Content: result.Content})
 
 		if result.StopReason != "tool_use" {
 			return nil
 		}
-		a.messages = append(a.messages, anthropic.Message{
+		a.messages = append(a.messages, message.Message{
 			Role:    "user",
 			Content: a.runTools(ctx, result.ToolUses()),
 		})
@@ -114,8 +114,8 @@ func (a *Agent) Run(ctx context.Context, input string) error {
 }
 
 // runTools executes each requested tool and returns the tool_result blocks.
-func (a *Agent) runTools(ctx context.Context, uses []anthropic.Block) []anthropic.Block {
-	results := make([]anthropic.Block, 0, len(uses))
+func (a *Agent) runTools(ctx context.Context, uses []message.Block) []message.Block {
+	results := make([]message.Block, 0, len(uses))
 	for _, use := range uses {
 		input := string(use.Input)
 		a.cfg.UI.ToolCall(use.Name, input)
@@ -135,8 +135,8 @@ func (a *Agent) runTools(ctx context.Context, uses []anthropic.Block) []anthropi
 	return results
 }
 
-func toolResult(id, out string, err error) anthropic.Block {
-	b := anthropic.Block{Type: "tool_result", ToolUseID: id}
+func toolResult(id, out string, err error) message.Block {
+	b := message.Block{Type: "tool_result", ToolUseID: id}
 	if err != nil {
 		b.Content = err.Error()
 		if out != "" {

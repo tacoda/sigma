@@ -15,6 +15,7 @@ import (
 	"github.com/tacoda/sigma/internal/config"
 	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/mcp"
+	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/permission"
 	"github.com/tacoda/sigma/internal/rules"
 	"github.com/tacoda/sigma/internal/skills"
@@ -125,10 +126,10 @@ func refreshCreds() {
 
 func authTest() {
 	client := loadClient()
-	resp, err := client.Complete(context.Background(), anthropic.Request{
+	resp, err := client.Complete(context.Background(), message.Request{
 		Model:     authModel,
 		MaxTokens: 64,
-		Messages:  []anthropic.Message{anthropic.UserText("Reply with exactly: SIGMA_AUTH_OK")},
+		Messages:  []message.Message{message.UserText("Reply with exactly: SIGMA_AUTH_OK")},
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "auth test failed:", err)

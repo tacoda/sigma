@@ -5,19 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/tacoda/sigma/internal/anthropic"
+	"github.com/tacoda/sigma/internal/message"
 )
 
 // fakeStreamer replays a scripted sequence of results, one per Stream call, and
 // records the requests it received. It simulates streaming by pushing each text
 // block through onText before returning.
 type fakeStreamer struct {
-	script []*anthropic.Result
+	script []*message.Result
 	calls  int
-	reqs   []anthropic.Request
+	reqs   []message.Request
 }
 
-func (f *fakeStreamer) Stream(_ context.Context, req anthropic.Request, onText func(string)) (*anthropic.Result, error) {
+func (f *fakeStreamer) Stream(_ context.Context, req message.Request, onText func(string)) (*message.Result, error) {
 	f.reqs = append(f.reqs, req)
 	if f.calls >= len(f.script) {
 		return nil, fmt.Errorf("fakeStreamer: no scripted result for call %d", f.calls+1)
@@ -74,23 +74,23 @@ func (t *echoTool) Run(_ context.Context, input json.RawMessage) (string, error)
 
 // helpers to build scripted results.
 
-func toolUseResult(text, toolID, toolName, inputJSON string) *anthropic.Result {
-	content := []anthropic.Block{}
+func toolUseResult(text, toolID, toolName, inputJSON string) *message.Result {
+	content := []message.Block{}
 	if text != "" {
-		content = append(content, anthropic.Block{Type: "text", Text: text})
+		content = append(content, message.Block{Type: "text", Text: text})
 	}
-	content = append(content, anthropic.Block{
+	content = append(content, message.Block{
 		Type:  "tool_use",
 		ID:    toolID,
 		Name:  toolName,
 		Input: json.RawMessage(inputJSON),
 	})
-	return &anthropic.Result{Content: content, StopReason: "tool_use"}
+	return &message.Result{Content: content, StopReason: "tool_use"}
 }
 
-func endTurnResult(text string) *anthropic.Result {
-	return &anthropic.Result{
-		Content:    []anthropic.Block{{Type: "text", Text: text}},
+func endTurnResult(text string) *message.Result {
+	return &message.Result{
+		Content:    []message.Block{{Type: "text", Text: text}},
 		StopReason: "end_turn",
 	}
 }

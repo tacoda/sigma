@@ -6,18 +6,18 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/tacoda/sigma/internal/anthropic"
+	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/tools"
 )
 
 // fakeClient returns canned results in sequence; once exhausted it repeats the
 // last one. It records how many times Stream was called.
 type fakeClient struct {
-	results []*anthropic.Result
+	results []*message.Result
 	calls   int
 }
 
-func (f *fakeClient) Stream(_ context.Context, _ anthropic.Request, _ func(string)) (*anthropic.Result, error) {
+func (f *fakeClient) Stream(_ context.Context, _ message.Request, _ func(string)) (*message.Result, error) {
 	f.calls++
 	i := f.calls - 1
 	if i >= len(f.results) {
@@ -26,16 +26,16 @@ func (f *fakeClient) Stream(_ context.Context, _ anthropic.Request, _ func(strin
 	return f.results[i], nil
 }
 
-func textResult(s string) *anthropic.Result {
-	return &anthropic.Result{
-		Content:    []anthropic.Block{{Type: "text", Text: s}},
+func textResult(s string) *message.Result {
+	return &message.Result{
+		Content:    []message.Block{{Type: "text", Text: s}},
 		StopReason: "end_turn",
 	}
 }
 
-func toolUseResult(name string) *anthropic.Result {
-	return &anthropic.Result{
-		Content:    []anthropic.Block{{Type: "tool_use", ID: "u1", Name: name, Input: json.RawMessage(`{}`)}},
+func toolUseResult(name string) *message.Result {
+	return &message.Result{
+		Content:    []message.Block{{Type: "tool_use", ID: "u1", Name: name, Input: json.RawMessage(`{}`)}},
 		StopReason: "tool_use",
 	}
 }
@@ -52,7 +52,7 @@ func (t recordTool) Run(context.Context, json.RawMessage) (string, error) {
 	return "ok", nil
 }
 
-func newAgent(t *testing.T, client Streamer, runs *int) *Agent {
+func newAgent(t *testing.T, client LLM, runs *int) *Agent {
 	t.Helper()
 	return New(Config{
 		Client: client,
@@ -69,11 +69,11 @@ func (noopUI) ToolCall(string, string) {}
 func TestRunLoop(t *testing.T) {
 	cases := []struct {
 		name                string
-		results             []*anthropic.Result
+		results             []*message.Result
 		wantCalls, wantRuns int
 	}{
-		{"final answer, no tools", []*anthropic.Result{textResult("done")}, 1, 0},
-		{"tool then finish", []*anthropic.Result{toolUseResult("noop"), textResult("done")}, 2, 1},
+		{"final answer, no tools", []*message.Result{textResult("done")}, 1, 0},
+		{"tool then finish", []*message.Result{toolUseResult("noop"), textResult("done")}, 2, 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -96,7 +96,7 @@ func TestRunLoop(t *testing.T) {
 
 func TestRunCapsToolIterations(t *testing.T) {
 	var runs int
-	client := &fakeClient{results: []*anthropic.Result{toolUseResult("noop")}} // always tool_use
+	client := &fakeClient{results: []*message.Result{toolUseResult("noop")}} // always tool_use
 	a := newAgent(t, client, &runs)
 
 	err := a.Run(context.Background(), "hi")
@@ -110,7 +110,7 @@ func TestRunCapsToolIterations(t *testing.T) {
 
 func TestRunRespectsContextCancellation(t *testing.T) {
 	var runs int
-	client := &fakeClient{results: []*anthropic.Result{toolUseResult("noop")}}
+	client := &fakeClient{results: []*message.Result{toolUseResult("noop")}}
 	a := newAgent(t, client, &runs)
 
 	ctx, cancel := context.WithCancel(context.Background())

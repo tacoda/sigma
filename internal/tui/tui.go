@@ -13,7 +13,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/tacoda/sigma/internal/agent"
-	"github.com/tacoda/sigma/internal/anthropic"
 	"github.com/tacoda/sigma/internal/commands"
 	"github.com/tacoda/sigma/internal/session"
 	"github.com/tacoda/sigma/internal/tools"
@@ -62,7 +61,7 @@ func (b *bridge) Allow(name, detail string) bool {
 
 // Config holds everything needed to start a chat session.
 type Config struct {
-	Client     *anthropic.Client
+	Client     agent.LLM
 	ChildTools []tools.Tool
 	Hooks      agent.Hooks
 	Allowed    []string

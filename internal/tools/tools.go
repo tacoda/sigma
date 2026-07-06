@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/tacoda/sigma/internal/anthropic"
+	"github.com/tacoda/sigma/internal/message"
 )
 
 // Tool is one capability the agent can invoke.
@@ -35,10 +35,10 @@ func NewRegistry(ts ...Tool) *Registry {
 }
 
 // Defs returns the API tool definitions.
-func (r *Registry) Defs() []anthropic.Tool {
-	defs := make([]anthropic.Tool, 0, len(r.tools))
+func (r *Registry) Defs() []message.Tool {
+	defs := make([]message.Tool, 0, len(r.tools))
 	for _, t := range r.tools {
-		defs = append(defs, anthropic.Tool{
+		defs = append(defs, message.Tool{
 			Name:        t.Name(),
 			Description: t.Description(),
 			InputSchema: t.Schema(),

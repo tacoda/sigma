@@ -3,7 +3,7 @@ package session
 import (
 	"testing"
 
-	"github.com/tacoda/sigma/internal/anthropic"
+	"github.com/tacoda/sigma/internal/message"
 )
 
 func TestSaveLoadRoundtrip(t *testing.T) {
@@ -12,9 +12,9 @@ func TestSaveLoadRoundtrip(t *testing.T) {
 	if Exists() {
 		t.Fatal("no session should exist yet")
 	}
-	want := []anthropic.Message{
-		anthropic.UserText("hello"),
-		{Role: "assistant", Content: []anthropic.Block{{Type: "text", Text: "hi"}}},
+	want := []message.Message{
+		message.UserText("hello"),
+		{Role: "assistant", Content: []message.Block{{Type: "text", Text: "hi"}}},
 	}
 	if err := Save(want); err != nil {
 		t.Fatal(err)

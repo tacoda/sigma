@@ -6,13 +6,15 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/tacoda/sigma/internal/message"
 )
 
 // sseEvent is the union of the SSE event payloads we care about.
 type sseEvent struct {
-	Type         string `json:"type"`
-	Index        int    `json:"index"`
-	ContentBlock *Block `json:"content_block"`
+	Type         string         `json:"type"`
+	Index        int            `json:"index"`
+	ContentBlock *message.Block `json:"content_block"`
 	Delta        *struct {
 		Type        string `json:"type"`
 		Text        string `json:"text"`
@@ -35,13 +37,13 @@ type sseEvent struct {
 
 // streamState accumulates blocks across SSE events.
 type streamState struct {
-	blocks   []Block
+	blocks   []message.Block
 	inputBuf map[int]*strings.Builder
-	result   Result
+	result   message.Result
 	onText   func(string)
 }
 
-func parseStream(body io.Reader, onText func(string)) (*Result, error) {
+func parseStream(body io.Reader, onText func(string)) (*message.Result, error) {
 	s := &streamState{inputBuf: map[int]*strings.Builder{}, onText: onText}
 
 	scanner := bufio.NewScanner(body)
@@ -126,9 +128,9 @@ func (s *streamState) applyFinish(ev sseEvent) {
 	}
 }
 
-func (s *streamState) startBlock(index int, block *Block) {
+func (s *streamState) startBlock(index int, block *message.Block) {
 	for len(s.blocks) <= index {
-		s.blocks = append(s.blocks, Block{})
+		s.blocks = append(s.blocks, message.Block{})
 	}
 	if block != nil {
 		s.blocks[index] = *block
