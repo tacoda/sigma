@@ -17,6 +17,12 @@ import (
 // maxBytes caps each rules file so a large CLAUDE.md can't dominate context.
 const maxBytes = 32 * 1024
 
+// Source contributes CLAUDE.md instructions to the system prompt
+// (satisfies prompt.Source).
+type Source struct{}
+
+func (Source) Contribute() (string, error) { return Load(), nil }
+
 // Load returns the concatenated rules, or "" if none are found.
 func Load() string {
 	var parts []string

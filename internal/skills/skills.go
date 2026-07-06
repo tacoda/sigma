@@ -60,6 +60,10 @@ func (s Set) loadDir(dir string) {
 }
 
 // Index renders the skills list for the system prompt, or "" if none.
+// Contribute returns the skill index for the system prompt (satisfies
+// prompt.Source).
+func (s Set) Contribute() (string, error) { return s.Index(), nil }
+
 func (s Set) Index() string {
 	if len(s) == 0 {
 		return ""

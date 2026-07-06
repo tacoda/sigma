@@ -17,6 +17,7 @@ import (
 	"github.com/tacoda/sigma/internal/mcp"
 	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/permission"
+	"github.com/tacoda/sigma/internal/prompt"
 	"github.com/tacoda/sigma/internal/rules"
 	"github.com/tacoda/sigma/internal/skills"
 	"github.com/tacoda/sigma/internal/tools"
@@ -174,10 +175,15 @@ func buildDeps() deps {
 		tools.ReadFile{}, tools.WriteFile{}, tools.EditFile{},
 		tools.Bash{}, tools.Glob{}, tools.Grep{},
 	}
-	system := rules.Load()
+	sources := []prompt.Source{rules.Source{}}
 	if sk := skills.Load(); len(sk) > 0 {
 		childTools = append(childTools, skills.NewTool(sk))
-		system = join(system, sk.Index())
+		sources = append(sources, sk)
+	}
+	system, err := prompt.Assemble(sources...)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "assemble system prompt:", err)
+		os.Exit(1)
 	}
 
 	cleanup := func() {}
@@ -196,16 +202,6 @@ func buildDeps() deps {
 		allowed:    cfg.AllowedTools,
 		cleanup:    cleanup,
 	}
-}
-
-func join(a, b string) string {
-	if a == "" {
-		return b
-	}
-	if b == "" {
-		return a
-	}
-	return a + "\n\n" + b
 }
 
 func runAgent(args []string) {
