@@ -23,6 +23,15 @@ type Settings struct {
 	Hooks map[string][]string `json:"hooks,omitempty"`
 	// Isolate runs each sub-agent task in a fresh git worktree.
 	Isolate bool `json:"isolate,omitempty"`
+	// Sandbox confines bash commands with the OS sandbox.
+	Sandbox Sandbox `json:"sandbox,omitempty"`
+}
+
+// Sandbox configures command confinement.
+type Sandbox struct {
+	Enabled  bool     `json:"enabled,omitempty"`
+	Network  bool     `json:"network,omitempty"`  // allow network access
+	Writable []string `json:"writable,omitempty"` // extra writable directories
 }
 
 // MCPServer describes one MCP server: a stdio command, or an HTTP URL.
@@ -57,6 +66,9 @@ func merge(s *Settings, path string) {
 	}
 	if f.Isolate {
 		s.Isolate = true
+	}
+	if f.Sandbox.Enabled {
+		s.Sandbox = f.Sandbox
 	}
 	s.AllowedTools = append(s.AllowedTools, f.AllowedTools...)
 	for name, srv := range f.MCPServers {

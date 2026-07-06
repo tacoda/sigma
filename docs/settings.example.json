@@ -1,0 +1,13 @@
+{
+  "model": "claude-sonnet-4-6",
+  "allowedTools": ["read_file", "grep", "glob"],
+  "isolate": true,
+  "sandbox": {
+    "enabled": true,
+    "network": false,
+    "writable": []
+  },
+  "hooks": {
+    "PreToolUse": ["./scripts/guard.sh"]
+  }
+}

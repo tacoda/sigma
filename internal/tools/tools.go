@@ -22,12 +22,16 @@ type Tool interface {
 }
 
 // FS returns the standard tool set. A non-empty root confines the file tools
-// (read/write/edit/glob/grep) under it — for worktree isolation — while bash
-// and worktree operate from the process cwd.
-func FS(root string) []Tool {
+// (read/write/edit/glob/grep) under it — for worktree isolation. ex is the
+// executor bash runs through; nil defaults to an unsandboxed exec.Local rooted
+// at root.
+func FS(root string, ex exec.Executor) []Tool {
+	if ex == nil {
+		ex = exec.Local{Dir: root}
+	}
 	return []Tool{
 		ReadFile{Root: root}, WriteFile{Root: root}, EditFile{Root: root},
-		Bash{Exec: exec.Local{Dir: root}}, Glob{Root: root}, Grep{Root: root}, Worktree{},
+		Bash{Exec: ex}, Glob{Root: root}, Grep{Root: root}, Worktree{},
 	}
 }
 

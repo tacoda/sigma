@@ -13,6 +13,7 @@ import (
 	"github.com/tacoda/sigma/internal/anthropic"
 	"github.com/tacoda/sigma/internal/auth"
 	"github.com/tacoda/sigma/internal/config"
+	"github.com/tacoda/sigma/internal/exec"
 	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/mcp"
 	"github.com/tacoda/sigma/internal/message"
@@ -221,8 +222,13 @@ func buildDeps() deps {
 		cleanup = client.Close
 	}
 
+	sb := cfg.Sandbox
 	newTools := func(root string) []tools.Tool {
-		return append(tools.FS(root), extra...)
+		var ex exec.Executor = exec.Local{Dir: root}
+		if sb.Enabled {
+			ex = exec.Sandbox{Dir: root, Policy: exec.Policy{AllowNetwork: sb.Network, Writable: sb.Writable}}
+		}
+		return append(tools.FS(root, ex), extra...)
 	}
 
 	return deps{
