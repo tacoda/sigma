@@ -156,11 +156,31 @@ func authTest() {
 type deps struct {
 	client     *anthropic.Client
 	childTools []tools.Tool
-	hooks      agent.Hooks
+	bus        hooks.Bus
 	model      string
 	system     string
 	allowed    []string
 	cleanup    func()
+}
+
+// hookDebug logs every event to stderr when SIGMA_HOOK_DEBUG is set.
+func hookDebug(_ context.Context, ev hooks.Event) hooks.Outcome {
+	fmt.Fprintf(os.Stderr, "[hook] %s %s\n", ev.Kind, ev.Tool)
+	return hooks.Outcome{}
+}
+
+// buildBus composes the hook buses: in-process callbacks, declarative YAML
+// rules, then legacy shell commands from settings.json.
+func buildBus(shellHooks map[string][]string) (hooks.Bus, error) {
+	rules, err := hooks.LoadRules(hooks.RulePaths()...)
+	if err != nil {
+		return nil, err
+	}
+	cb := hooks.NewCallbacks()
+	if os.Getenv("SIGMA_HOOK_DEBUG") != "" {
+		cb.OnAll(hookDebug)
+	}
+	return hooks.Multi{cb, rules, hooks.NewShell(shellHooks)}, nil
 }
 
 // buildDeps assembles config, client, tools, skills, MCP servers, hooks, and
@@ -187,6 +207,12 @@ func buildDeps() deps {
 		os.Exit(1)
 	}
 
+	bus, err := buildBus(cfg.Hooks)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "load hooks:", err)
+		os.Exit(1)
+	}
+
 	cleanup := func() {}
 	if len(cfg.MCPServers) > 0 {
 		client, mcpTools := mcp.Connect(context.Background(), cfg.MCPServers)
@@ -197,7 +223,7 @@ func buildDeps() deps {
 	return deps{
 		client:     loadClient(),
 		childTools: childTools,
-		hooks:      hooks.New(cfg.Hooks),
+		bus:        bus,
 		model:      model,
 		system:     system,
 		allowed:    cfg.AllowedTools,
@@ -226,7 +252,7 @@ func runAgent(args []string) {
 	base := agent.Config{
 		Client:     d.client,
 		Permission: gate,
-		Hooks:      d.hooks,
+		Hooks:      d.bus,
 		Model:      d.model,
 		System:     d.system,
 	}
@@ -236,7 +262,9 @@ func runAgent(args []string) {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+	d.bus.Emit(ctx, hooks.Event{Kind: hooks.SessionStart})
 	err := a.Run(ctx, strings.Join(args, " "))
+	d.bus.Emit(ctx, hooks.Event{Kind: hooks.SessionEnd})
 	fmt.Println()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "run failed:", err)
@@ -251,7 +279,7 @@ func runChat(args []string) {
 	cfg := tui.Config{
 		Client:     d.client,
 		ChildTools: d.childTools,
-		Hooks:      d.hooks,
+		Hooks:      d.bus,
 		Allowed:    d.allowed,
 		Model:      d.model,
 		System:     d.system,

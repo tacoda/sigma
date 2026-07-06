@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/tools"
 )
@@ -47,19 +48,13 @@ type LLM interface {
 	Stream(ctx context.Context, req message.Request, onText func(string)) (*message.Result, error)
 }
 
-// Hooks fire around tool execution. A blocking PreTool stops the tool.
-type Hooks interface {
-	PreTool(name, input string) (block bool, reason string)
-	PostTool(name, output string)
-}
-
 // Config holds an agent's collaborators.
 type Config struct {
 	Client     LLM
 	Tools      *tools.Registry
 	Permission PermissionPolicy
 	UI         UI
-	Hooks      Hooks
+	Hooks      hooks.Bus
 	Model      string
 	System     string
 }
@@ -73,7 +68,7 @@ type Agent struct {
 // New creates an agent. A nil Hooks is replaced with a no-op.
 func New(cfg Config) *Agent {
 	if cfg.Hooks == nil {
-		cfg.Hooks = noopHooks{}
+		cfg.Hooks = hooks.Nop{}
 	}
 	return &Agent{cfg: cfg}
 }
@@ -91,11 +86,13 @@ func (a *Agent) Reset() { a.messages = nil }
 // produces a final answer.
 func (a *Agent) Run(ctx context.Context, input string) error {
 	a.messages = append(a.messages, message.UserText(input))
+	a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.UserPrompt, Prompt: input})
 
 	for i := 0; i < maxIterations; i++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.PreLLM})
 		result, err := a.cfg.Client.Stream(ctx, message.Request{
 			Model:     a.cfg.Model,
 			MaxTokens: maxTokens,
@@ -107,9 +104,12 @@ func (a *Agent) Run(ctx context.Context, input string) error {
 			return err
 		}
 		a.messages = append(a.messages, message.Message{Role: "assistant", Content: result.Content})
+		a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.PostLLM,
+			InTokens: result.Usage.InputTokens, OutTokens: result.Usage.OutputTokens})
 		a.cfg.UI.Usage(result.Usage.InputTokens, result.Usage.OutputTokens)
 
 		if result.StopReason != "tool_use" {
+			a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.Stop})
 			return nil
 		}
 		a.messages = append(a.messages, message.Message{
@@ -127,8 +127,8 @@ func (a *Agent) runTools(ctx context.Context, uses []message.Block) []message.Bl
 		input := string(use.Input)
 		a.cfg.UI.ToolCall(use.Name, input)
 
-		if block, reason := a.cfg.Hooks.PreTool(use.Name, input); block {
-			results = append(results, toolResult(use.ID, reason, errBlocked))
+		if o := a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.PreTool, Tool: use.Name, Input: input}); o.Block {
+			results = append(results, toolResult(use.ID, o.Reason, errBlocked))
 			continue
 		}
 		if !a.cfg.Tools.ReadOnly(use.Name) && !a.cfg.Permission.Allow(use.Name, input) {
@@ -136,7 +136,10 @@ func (a *Agent) runTools(ctx context.Context, uses []message.Block) []message.Bl
 			continue
 		}
 		out, err := a.cfg.Tools.Run(ctx, use.Name, use.Input)
-		a.cfg.Hooks.PostTool(use.Name, out)
+		a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.PostTool, Tool: use.Name, Output: out})
+		if err != nil {
+			a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.ToolError, Tool: use.Name, Output: out})
+		}
 		a.cfg.UI.ToolResult(use.Name, out, err != nil)
 		results = append(results, toolResult(use.ID, out, err))
 	}
@@ -156,9 +159,3 @@ func toolResult(id, out string, err error) message.Block {
 	b.Content = out
 	return b
 }
-
-// noopHooks is the default when no hooks are configured.
-type noopHooks struct{}
-
-func (noopHooks) PreTool(string, string) (bool, string) { return false, "" }
-func (noopHooks) PostTool(string, string)               {}

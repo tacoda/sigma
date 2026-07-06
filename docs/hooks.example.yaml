@@ -1,0 +1,36 @@
+# Declarative hooks — copy to .sigma/hooks.yaml (project) or ~/.sigma/hooks.yaml (user).
+#
+# Each rule fires on one event, optionally filtered by a tool-name regex, and
+# runs one or more actions: log, notify, run, deny (evaluated in that order, so
+# side effects happen before a deny blocks).
+#
+# Events: SessionStart SessionEnd UserPromptSubmit PreLLMRequest PostLLMResponse
+#         PreToolUse PostToolUse ToolError Stop Notification
+#
+# `run` executes via `bash -c`, so any interpreter works. The event is delivered
+# as JSON on stdin plus $SIGMA_EVENT / $SIGMA_TOOL. Non-zero exit blocks a
+# PreToolUse. Templates {event} {tool} {output} {prompt} {message} expand in
+# log/notify/deny text.
+
+hooks:
+  # Block writes to sensitive files.
+  - on: PreToolUse
+    match: { tool: "write_file|edit_file" }
+    deny: "writes disabled in review mode"
+
+  # Run a Python audit before every bash command (matches the python tool idea:
+  # match declaratively, run a .py; it reads the JSON payload from stdin).
+  - on: PreToolUse
+    match: { tool: bash }
+    run: python3 .sigma/hooks/audit.py
+
+  # Format after file edits.
+  - on: PostToolUse
+    match: { tool: "write_file|edit_file" }
+    run: ./scripts/format.sh
+
+  # Observe the loop.
+  - on: PostLLMResponse
+    log: "llm response for {tool}"
+  - on: Stop
+    notify: "turn complete"

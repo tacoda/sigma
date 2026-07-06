@@ -16,6 +16,7 @@ import (
 
 	"github.com/tacoda/sigma/internal/agent"
 	"github.com/tacoda/sigma/internal/commands"
+	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/tools"
 )
@@ -89,7 +90,7 @@ func (b *bridge) Allow(name, detail string) bool {
 type Config struct {
 	Client     agent.LLM
 	ChildTools []tools.Tool
-	Hooks      agent.Hooks
+	Hooks      hooks.Bus
 	Allowed    []string
 	Model      string
 	System     string
@@ -99,6 +100,9 @@ type Config struct {
 
 // Run starts the interactive chat session and blocks until the user quits.
 func Run(cfg Config) error {
+	if cfg.Hooks == nil {
+		cfg.Hooks = hooks.Nop{}
+	}
 	b := &bridge{session: map[string]bool{}}
 	b.preApprove(cfg.Allowed)
 
@@ -127,6 +131,8 @@ func Run(cfg Config) error {
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	b.prog = p
 
+	cfg.Hooks.Emit(context.Background(), hooks.Event{Kind: hooks.SessionStart})
 	_, err := p.Run()
+	cfg.Hooks.Emit(context.Background(), hooks.Event{Kind: hooks.SessionEnd})
 	return err
 }
