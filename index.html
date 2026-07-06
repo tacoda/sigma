@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sigma — a coding agent</title>
+<meta name="description" content="Sigma is a coding-agent CLI in Go. A minimal but complete agent harness with the Claude-standard feature set.">
+<style>
+  :root {
+    /* grays, from the TUI palette */
+    --bg:       #242424; /* dark gray  (surface) */
+    --panel:    #2e2e2e; /* medium gray */
+    --border:   #3d3d3d;
+    --fg:       #d6d6d6;
+    --dim:      #8a8a8a;
+    --faint:    #6a6a6a;
+    /* mint sweep the wordmark shimmers through, from banner.go */
+    --m1: #4fb89a;
+    --m2: #7ee0c0;
+    --m3: #a8f0d8;
+    --m4: #3e8c74;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.6 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 8vh 24px 12vh; }
+  header { margin-bottom: 3rem; }
+  .wordmark { font-size: clamp(2.5rem, 9vw, 4.5rem); font-weight: 700; letter-spacing: -0.02em; }
+  .wordmark span { display: inline-block; }
+  .tagline { color: var(--faint); font-size: 1rem; margin-top: 0.25rem; }
+  h2 { color: var(--m2); font-size: 1.1rem; margin: 2.5rem 0 0.75rem; }
+  p { color: var(--fg); }
+  a { color: var(--m2); text-decoration: none; border-bottom: 1px solid var(--m4); }
+  a:hover { color: var(--m3); border-bottom-color: var(--m2); }
+  .lede { font-size: 1.15rem; color: var(--fg); }
+  code, pre { font-family: inherit; }
+  pre {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    color: var(--m3);
+  }
+  p code { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 0.1em 0.4em; color: var(--m3); }
+  ul.features { list-style: none; padding: 0; }
+  ul.features li { padding: 0.4rem 0; border-bottom: 1px solid var(--border); color: var(--dim); }
+  ul.features li b { color: var(--fg); font-weight: 600; }
+  footer { margin-top: 4rem; color: var(--faint); font-size: 0.9rem; }
+  footer a { border: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="wordmark" id="wordmark" aria-label="Sigma">Σ sigma</div>
+    <div class="tagline">· coding agent</div>
+  </header>
+
+  <p class="lede">A coding-agent CLI in Go. It reuses your Claude Code subscription
+  credentials, so no API key is needed.</p>
+
+  <p>Sigma is a minimal but complete agent harness with the Claude-standard
+  feature set — tools, a permission gate, rules, slash commands, skills, MCP
+  servers, hooks, sub-agents, and resumable sessions.</p>
+
+  <h2>Install</h2>
+  <pre>go build -o sigma ./cmd/sigma</pre>
+  <p>Requires Go 1.25+ and an authenticated Claude Code install.</p>
+
+  <h2>Use</h2>
+  <pre>sigma run "Summarize the TODOs in this repo."
+sigma chat            # interactive TUI; /help lists commands</pre>
+
+  <h2>What's inside</h2>
+  <ul class="features">
+    <li><b>Tools</b> — read, write, edit, bash, glob, grep</li>
+    <li><b>Permission gate</b> — read-only tools auto-run; mutating tools prompt</li>
+    <li><b>Rules</b> — CLAUDE.md injected into the system prompt</li>
+    <li><b>Slash commands & skills</b> — templated commands, progressive-disclosure skills</li>
+    <li><b>MCP</b> — stdio + streamable-http servers</li>
+    <li><b>Hooks</b> — PreToolUse / PostToolUse shell commands</li>
+    <li><b>Sub-agents</b> — delegate a subtask to a fresh agent</li>
+    <li><b>Sessions</b> — autosaved and resumable</li>
+  </ul>
+
+  <p style="color:var(--faint);margin-top:2rem">More docs land as features ship.</p>
+
+  <footer>
+    <a href="https://github.com/tacoda">github.com/tacoda</a>
+  </footer>
+</div>
+
+<script>
+  // Shimmer the wordmark through the mint sweep, one step per frame —
+  // mirrors banner.go: palette cycles across the glyphs over time.
+  (function () {
+    var palette = ["#4fb89a", "#7ee0c0", "#a8f0d8", "#7ee0c0", "#4fb89a", "#3e8c74"];
+    var el = document.getElementById("wordmark");
+    var text = el.textContent;
+    el.textContent = "";
+    var spans = [].map.call(text, function (ch) {
+      var s = document.createElement("span");
+      s.textContent = ch;
+      el.appendChild(s);
+      return s;
+    });
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      spans.forEach(function (s, i) { s.style.color = palette[i % palette.length]; });
+      return;
+    }
+    var frame = 0;
+    setInterval(function () {
+      spans.forEach(function (s, i) {
+        s.style.color = palette[(i + frame) % palette.length];
+      });
+      frame++;
+    }, 150); // bannerInterval
+  })();
+</script>
+</body>
+</html>
