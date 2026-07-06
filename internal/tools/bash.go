@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"time"
+
+	"github.com/tacoda/sigma/internal/exec"
 )
 
 const (
@@ -13,8 +14,9 @@ const (
 	maxOutputBytes     = 64 * 1024
 )
 
-// Bash runs a shell command via `bash -c`.
-type Bash struct{}
+// Bash runs a shell command through an Executor. A nil Exec uses exec.Local
+// (host, no isolation); a sandbox or worktree adapter can be substituted.
+type Bash struct{ Exec exec.Executor }
 
 func (Bash) Name() string { return "bash" }
 
@@ -35,7 +37,7 @@ func (Bash) Schema() json.RawMessage {
 	}`)
 }
 
-func (Bash) Run(ctx context.Context, input json.RawMessage) (string, error) {
+func (b Bash) Run(ctx context.Context, input json.RawMessage) (string, error) {
 	var args struct {
 		Command        string `json:"command"`
 		TimeoutSeconds int    `json:"timeout_seconds"`
@@ -50,11 +52,13 @@ func (Bash) Run(ctx context.Context, input json.RawMessage) (string, error) {
 	if args.TimeoutSeconds > 0 {
 		timeout = time.Duration(args.TimeoutSeconds) * time.Second
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
-	out, err := exec.CommandContext(ctx, "bash", "-c", args.Command).CombinedOutput()
-	text := truncate(string(out))
+	ex := b.Exec
+	if ex == nil {
+		ex = exec.Local{}
+	}
+	out, err := ex.Run(ctx, exec.Spec{Command: args.Command, Timeout: timeout})
+	text := truncate(out)
 	if err != nil {
 		return text, fmt.Errorf("command failed: %w", err)
 	}
