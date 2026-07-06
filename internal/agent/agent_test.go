@@ -63,8 +63,10 @@ func newAgent(t *testing.T, client LLM, runs *int) *Agent {
 
 type noopUI struct{}
 
-func (noopUI) Text(string)             {}
-func (noopUI) ToolCall(string, string) {}
+func (noopUI) Text(string)                     {}
+func (noopUI) ToolCall(string, string)         {}
+func (noopUI) ToolResult(string, string, bool) {}
+func (noopUI) Usage(int, int)                  {}
 
 func TestRunLoop(t *testing.T) {
 	cases := []struct {

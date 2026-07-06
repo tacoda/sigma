@@ -69,5 +69,7 @@ func (s subagentTool) Run(ctx context.Context, input json.RawMessage) (string, e
 // captureUI collects a sub-agent's text output instead of displaying it.
 type captureUI struct{ out *strings.Builder }
 
-func (c *captureUI) Text(delta string)       { c.out.WriteString(delta) }
-func (c *captureUI) ToolCall(string, string) {}
+func (c *captureUI) Text(delta string)               { c.out.WriteString(delta) }
+func (c *captureUI) ToolCall(string, string)         {}
+func (c *captureUI) ToolResult(string, string, bool) {}
+func (c *captureUI) Usage(int, int)                  {}

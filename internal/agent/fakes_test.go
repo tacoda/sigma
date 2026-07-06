@@ -40,8 +40,10 @@ type fakeUI struct {
 	calls []string // "name input" per ToolCall
 }
 
-func (u *fakeUI) Text(delta string)           { u.text += delta }
-func (u *fakeUI) ToolCall(name, input string) { u.calls = append(u.calls, name+" "+input) }
+func (u *fakeUI) Text(delta string)               { u.text += delta }
+func (u *fakeUI) ToolCall(name, input string)     { u.calls = append(u.calls, name+" "+input) }
+func (u *fakeUI) ToolResult(string, string, bool) {}
+func (u *fakeUI) Usage(int, int)                  {}
 
 // allowApprover approves every tool.
 type allowApprover struct{ asked []string }

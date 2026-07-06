@@ -28,6 +28,11 @@ type UI interface {
 	Text(delta string)
 	// ToolCall is called before a tool runs.
 	ToolCall(name, input string)
+	// ToolResult is called after a tool runs, with its output and whether it
+	// failed.
+	ToolResult(name, output string, isErr bool)
+	// Usage reports token counts for each model response.
+	Usage(inTokens, outTokens int)
 }
 
 // Approver decides whether a mutating tool may run.
@@ -101,6 +106,7 @@ func (a *Agent) Run(ctx context.Context, input string) error {
 			return err
 		}
 		a.messages = append(a.messages, message.Message{Role: "assistant", Content: result.Content})
+		a.cfg.UI.Usage(result.Usage.InputTokens, result.Usage.OutputTokens)
 
 		if result.StopReason != "tool_use" {
 			return nil
@@ -130,6 +136,7 @@ func (a *Agent) runTools(ctx context.Context, uses []message.Block) []message.Bl
 		}
 		out, err := a.cfg.Tools.Run(ctx, use.Name, use.Input)
 		a.cfg.Hooks.PostTool(use.Name, out)
+		a.cfg.UI.ToolResult(use.Name, out, err != nil)
 		results = append(results, toolResult(use.ID, out, err))
 	}
 	return results

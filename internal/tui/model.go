@@ -3,8 +3,8 @@ package tui
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -31,15 +31,21 @@ type model struct {
 
 	// Plain strings (not strings.Builder): Bubble Tea copies the model on every
 	// Update, and a copied Builder panics.
-	transcript string // committed conversation
-	cur        string // streaming assistant text, not yet committed
-	busy       bool
-	pending    *askMsg
+	transcript  string     // committed conversation
+	cur         string     // streaming assistant text, not yet committed
+	pendingTool *toolEntry // tool currently running, rendered live
+	busy        bool
+	pending     *askMsg
+	turnStart   time.Time
 
 	history []string // past submitted lines, oldest first
 	histIdx int      // cursor into history; == len(history) means "new line"
 
-	frame int // banner animation frame
+	modelName     string
+	cwd           string
+	tokIn, tokOut int
+
+	frame int // banner + spinner animation frame
 	ready bool
 }
 
@@ -70,7 +76,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case toolMsg:
 		m.commitAssistant()
-		m.transcript += toolStyle.Render("  ⚙ "+msg.name+" "+msg.input) + "\n"
+		m.pendingTool = &toolEntry{name: msg.name, input: msg.input, start: time.Now()}
+		m.refresh()
+		return m, nil
+	case toolResultMsg:
+		if m.pendingTool != nil {
+			dur := time.Since(m.pendingTool.start)
+			m.transcript += toolCardDone(*m.pendingTool, msg.output, msg.isErr, dur, m.termW) + "\n"
+			m.pendingTool = nil
+		}
+		m.refresh()
+		return m, nil
+	case usageMsg:
+		m.tokIn += msg.in
+		m.tokOut += msg.out
 		m.refresh()
 		return m, nil
 	case tea.MouseMsg:
@@ -96,6 +115,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // onDone commits the finished turn, reporting cancellation or error, and
 // autosaves the session.
 func (m model) onDone(msg doneMsg) model {
+	m.pendingTool = nil
 	m.commitAssistant()
 	switch {
 	case msg.err == nil:
@@ -298,8 +318,9 @@ func (m model) submit() (tea.Model, tea.Cmd) {
 	if strings.HasPrefix(val, "/") {
 		return m.dispatch(val)
 	}
-	m.transcript += "\n" + userStyle.Render("› "+val) + "\n\n"
+	m.transcript += "\n" + userLabel.Render("› "+val) + "\n\n"
 	m.busy = true
+	m.turnStart = time.Now()
 	m.refresh()
 	return m, m.startTurn(val)
 }
@@ -316,6 +337,8 @@ func (m model) dispatch(line string) (tea.Model, tea.Cmd) {
 		m.agent.Reset()
 		m.transcript = ""
 		m.cur = ""
+		m.pendingTool = nil
+		m.tokIn, m.tokOut = 0, 0
 		m.refresh()
 		return m, nil
 	case "quit", "exit":
@@ -327,8 +350,9 @@ func (m model) dispatch(line string) (tea.Model, tea.Cmd) {
 		m.refresh()
 		return m, nil
 	}
-	m.transcript += "\n" + userStyle.Render("› /"+name) + noteStyle.Render(" "+args) + "\n\n"
+	m.transcript += "\n" + userLabel.Render("› /"+name) + noteStyle.Render(" "+args) + "\n\n"
 	m.busy = true
+	m.turnStart = time.Now()
 	m.refresh()
 	return m, m.startTurn(commands.Expand(body, args))
 }
@@ -355,13 +379,30 @@ func (m model) startTurn(input string) tea.Cmd {
 	}
 }
 
-// commitAssistant flushes streamed text into the transcript.
+// commitAssistant renders the streamed turn as markdown into the transcript.
 func (m *model) commitAssistant() {
-	if m.cur == "" {
+	if strings.TrimSpace(m.cur) == "" {
+		m.cur = ""
 		return
 	}
-	m.transcript += m.cur + "\n"
+	m.transcript += renderMarkdown(m.cur, m.termW) + "\n"
 	m.cur = ""
+}
+
+// live is the not-yet-committed region below the transcript: streaming
+// assistant text and a running tool card.
+func (m model) live() string {
+	var s string
+	if m.cur != "" {
+		s += userText.Render(m.cur)
+	}
+	if m.pendingTool != nil {
+		if s != "" {
+			s += "\n"
+		}
+		s += toolCardRunning(*m.pendingTool, m.frame, m.termW) + "\n"
+	}
+	return s
 }
 
 func (m *model) resize(w, h int) {
@@ -389,25 +430,26 @@ func (m *model) syncHeight() {
 	m.input.SetHeight(n)
 }
 
-// footerRows is the height reserved below the transcript: a single status line
-// while busy or awaiting approval, otherwise the (possibly multi-line) input.
-func (m model) footerRows() int {
+// interactionRows is the height of the input region: one line while busy or
+// awaiting approval, otherwise the bordered (possibly multi-line) input box.
+func (m model) interactionRows() int {
 	if m.busy || m.pending != nil {
 		return 1
 	}
-	return m.inputH
+	return m.inputH + 2 // +2 for the rounded border
 }
 
 func (m *model) refresh() {
 	if !m.ready {
 		return
 	}
-	m.vp.Height = m.termH - m.footerRows() - 1 - bannerHeight // -1 separator, banner on top
+	// Layout rows: banner(1) + viewport + status(1) + interaction + hint(1).
+	m.vp.Height = m.termH - m.interactionRows() - 3
 	if m.vp.Height < 1 {
 		m.vp.Height = 1
 	}
 	atBottom := m.vp.AtBottom()
-	m.vp.SetContent(m.transcript + m.cur)
+	m.vp.SetContent(m.transcript + m.live())
 	if atBottom {
 		m.vp.GotoBottom() // follow new output only when not scrolled up
 	}
@@ -415,17 +457,53 @@ func (m *model) refresh() {
 
 func (m model) View() string {
 	if !m.ready {
-		return "loading…"
+		return banner(m.frame)
 	}
-	var footer string
+	return strings.Join([]string{
+		banner(m.frame),
+		m.vp.View(),
+		m.statusLine(),
+		m.interaction(),
+		m.hintLine(),
+	}, "\n")
+}
+
+// interaction is the input region: approval prompt, busy spinner, or the
+// bordered input box.
+func (m model) interaction() string {
 	switch {
 	case m.pending != nil:
-		footer = promptStyle.Render(fmt.Sprintf("allow %s? %s  [y]es / [a]lways / [N]o",
-			m.pending.name, m.pending.detail))
+		return okStyle.Render("  ● ") + promptText.Render("allow ") +
+			userLabel.Render(m.pending.name) + toolStyle.Render(" "+m.pending.detail) +
+			promptText.Render("   ") + noteStyle.Render("[y]es / [a]lways / [N]o")
 	case m.busy:
-		footer = busyStyle.Render("…working (esc to cancel, pgup/pgdn to scroll, ctrl+c to quit)")
+		el := time.Since(m.turnStart).Round(100 * time.Millisecond)
+		return spinStyle.Render("  "+spinnerFrame(m.frame)) +
+			busyStyle.Render(" working ") + toolStyle.Render(el.String())
 	default:
-		footer = m.input.View()
+		return inputBox.Width(m.termW - 2).Render(m.input.View())
 	}
-	return banner(m.frame) + "\n" + m.vp.View() + "\n" + footer
+}
+
+// statusLine is the persistent bar: model, cwd, token usage, scroll position.
+func (m model) statusLine() string {
+	sep := statusBar.Render(" · ")
+	line := statusKey.Render(" "+m.modelName) + sep +
+		statusVal.Render(m.cwd) + sep +
+		statusKey.Render("tok ") + statusVal.Render(fmtTokens(m.tokIn)+"↑ "+fmtTokens(m.tokOut)+"↓") + sep +
+		statusVal.Render(scrollPct(m.vp))
+	return statusBar.Width(m.termW).Render(line)
+}
+
+func (m model) hintLine() string {
+	var keys string
+	switch {
+	case m.pending != nil:
+		keys = kbd("y") + " allow  " + kbd("a") + " always  " + kbd("n") + " deny"
+	case m.busy:
+		keys = kbd("esc") + " cancel  " + kbd("pgup/pgdn") + " scroll  " + kbd("^C") + " quit"
+	default:
+		keys = kbd("⏎") + " send  " + kbd("⇧⏎") + " newline  " + kbd("/") + " cmds  " + kbd("^C") + " quit"
+	}
+	return hintBar.Render(" " + keys)
 }

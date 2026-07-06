@@ -32,6 +32,16 @@ func (consoleUI) ToolCall(name, input string) {
 	fmt.Printf("\n  ⚙ %s %s\n", name, input)
 }
 
+func (consoleUI) ToolResult(name, output string, isErr bool) {
+	status := "✓"
+	if isErr {
+		status = "✗"
+	}
+	fmt.Printf("  %s %s\n", status, name)
+}
+
+func (consoleUI) Usage(int, int) {}
+
 const version = "0.0.1"
 
 // authModel is cheap; used for the auth smoke test.

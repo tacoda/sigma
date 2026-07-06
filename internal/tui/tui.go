@@ -9,6 +9,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -18,10 +20,24 @@ import (
 	"github.com/tacoda/sigma/internal/tools"
 )
 
+// shortCWD is the current directory's base name, for the status line.
+func shortCWD() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "?"
+	}
+	return filepath.Base(wd)
+}
+
 // --- messages pushed into the Bubble Tea loop ---
 
 type textMsg string
 type toolMsg struct{ name, input string }
+type toolResultMsg struct {
+	name, output string
+	isErr        bool
+}
+type usageMsg struct{ in, out int }
 type doneMsg struct{ err error }
 
 type askReply struct{ allow, always bool }
@@ -39,6 +55,10 @@ type bridge struct {
 
 func (b *bridge) Text(delta string)        { b.prog.Send(textMsg(delta)) }
 func (b *bridge) ToolCall(name, in string) { b.prog.Send(toolMsg{name, in}) }
+func (b *bridge) ToolResult(name, output string, isErr bool) {
+	b.prog.Send(toolResultMsg{name: name, output: output, isErr: isErr})
+}
+func (b *bridge) Usage(in, out int) { b.prog.Send(usageMsg{in, out}) }
 func (b *bridge) preApprove(names []string) {
 	for _, n := range names {
 		b.session[n] = true
@@ -87,6 +107,8 @@ func Run(cfg Config) error {
 	a := agent.New(base)
 
 	m := newModel(a, b, commands.Load())
+	m.modelName = cfg.Model
+	m.cwd = shortCWD()
 	if cfg.Resume {
 		if msgs, err := session.Load(); err == nil {
 			a.Restore(msgs)

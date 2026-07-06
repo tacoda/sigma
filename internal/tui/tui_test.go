@@ -98,6 +98,37 @@ func TestInputHeightGrowsAndClamps(t *testing.T) {
 	}
 }
 
+// A full turn (streamed text -> tool call -> tool result -> usage) renders
+// through markdown, tool cards, and the status line without panicking, and the
+// chrome shows the expected pieces.
+func TestViewRendersTurn(t *testing.T) {
+	m := newModel(nil, &bridge{session: map[string]bool{}}, nil)
+	m.modelName = "sonnet-4-6"
+	m.cwd = "sigma"
+
+	step := func(msg tea.Msg) {
+		t.Helper()
+		next, _ := m.Update(msg)
+		m = next.(model)
+	}
+
+	step(tea.WindowSizeMsg{Width: 80, Height: 24})
+	step(textMsg("# Title\n\nsome **bold** text"))
+	step(toolMsg{name: "bash", input: `{"command":"go test ./..."}`})
+	if !strings.Contains(m.View(), "running") {
+		t.Error("running tool card not shown")
+	}
+	step(toolResultMsg{name: "bash", output: "ok\nPASS\n", isErr: false})
+	step(usageMsg{in: 1200, out: 300})
+
+	out := m.View()
+	for _, want := range []string{"sigma", "sonnet-4-6", "1.2k", "$ go test ./...", "✓ ok"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("View missing %q", want)
+		}
+	}
+}
+
 // refresh follows new output only when the viewport is already at the bottom;
 // once the user scrolls up, incoming text must not yank them back down.
 func TestScrollbackHoldsPosition(t *testing.T) {

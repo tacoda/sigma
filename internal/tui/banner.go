@@ -20,10 +20,10 @@ func tick() tea.Cmd {
 	return tea.Tick(bannerInterval, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
-// bannerPalette is a cyan sweep the wordmark shimmers through.
-var bannerPalette = []lipgloss.Color{"45", "51", "87", "123", "159", "123", "87", "51"}
+// bannerPalette is a mint sweep the wordmark shimmers through.
+var bannerPalette = []lipgloss.Color{mintDim, mint, mintBright, mint, mintDim, "#3E8C74"}
 
-var bannerTagline = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("  · coding agent")
+var bannerTagline = lipgloss.NewStyle().Foreground(faint).Render("  · coding agent")
 
 // banner renders the animated "Σ sigma" wordmark; frame advances the color
 // sweep so each redraw shifts the gradient one step.
