@@ -39,6 +39,7 @@ type model struct {
 	history []string // past submitted lines, oldest first
 	histIdx int      // cursor into history; == len(history) means "new line"
 
+	frame int // banner animation frame
 	ready bool
 }
 
@@ -54,7 +55,7 @@ func newModel(a *agent.Agent, b *bridge, cmds commands.Set) model {
 	return model{agent: a, bridge: b, commands: cmds, input: ta, inputH: 1}
 }
 
-func (m model) Init() tea.Cmd { return textarea.Blink }
+func (m model) Init() tea.Cmd { return tea.Batch(textarea.Blink, tick()) }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -82,6 +83,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case doneMsg:
 		return m.onDone(msg), nil
+	case tickMsg:
+		m.frame++
+		return m, tick()
 	}
 
 	var cmd tea.Cmd
@@ -398,7 +402,7 @@ func (m *model) refresh() {
 	if !m.ready {
 		return
 	}
-	m.vp.Height = m.termH - m.footerRows() - 1 // -1 for the separator line
+	m.vp.Height = m.termH - m.footerRows() - 1 - bannerHeight // -1 separator, banner on top
 	if m.vp.Height < 1 {
 		m.vp.Height = 1
 	}
@@ -423,5 +427,5 @@ func (m model) View() string {
 	default:
 		footer = m.input.View()
 	}
-	return m.vp.View() + "\n" + footer
+	return banner(m.frame) + "\n" + m.vp.View() + "\n" + footer
 }
