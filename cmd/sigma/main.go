@@ -194,7 +194,7 @@ func buildDeps() deps {
 
 	childTools := []tools.Tool{
 		tools.ReadFile{}, tools.WriteFile{}, tools.EditFile{},
-		tools.Bash{}, tools.Glob{}, tools.Grep{},
+		tools.Bash{}, tools.Glob{}, tools.Grep{}, tools.Worktree{},
 	}
 	sources := []prompt.Source{rules.Source{}}
 	if sk := skills.Load(); len(sk) > 0 {

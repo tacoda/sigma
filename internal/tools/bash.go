@@ -31,7 +31,8 @@ func (Bash) Schema() json.RawMessage {
 		"type": "object",
 		"properties": {
 			"command": {"type": "string", "description": "The shell command to run"},
-			"timeout_seconds": {"type": "integer", "description": "Optional timeout in seconds (default 120)"}
+			"timeout_seconds": {"type": "integer", "description": "Optional timeout in seconds (default 120)"},
+			"dir": {"type": "string", "description": "Optional working directory (e.g. a worktree path)"}
 		},
 		"required": ["command"]
 	}`)
@@ -41,6 +42,7 @@ func (b Bash) Run(ctx context.Context, input json.RawMessage) (string, error) {
 	var args struct {
 		Command        string `json:"command"`
 		TimeoutSeconds int    `json:"timeout_seconds"`
+		Dir            string `json:"dir"`
 	}
 	if err := json.Unmarshal(input, &args); err != nil {
 		return "", err
@@ -57,7 +59,7 @@ func (b Bash) Run(ctx context.Context, input json.RawMessage) (string, error) {
 	if ex == nil {
 		ex = exec.Local{}
 	}
-	out, err := ex.Run(ctx, exec.Spec{Command: args.Command, Timeout: timeout})
+	out, err := ex.Run(ctx, exec.Spec{Command: args.Command, Timeout: timeout, Dir: args.Dir})
 	text := truncate(out)
 	if err != nil {
 		return text, fmt.Errorf("command failed: %w", err)

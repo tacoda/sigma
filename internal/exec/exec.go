@@ -13,6 +13,7 @@ import (
 type Spec struct {
 	Command string        // run via `bash -c`
 	Timeout time.Duration // 0 means no timeout
+	Dir     string        // working directory; empty inherits the process cwd
 }
 
 // Executor runs a command and returns its combined stdout and stderr. A non-nil
@@ -31,6 +32,8 @@ func (Local) Run(ctx context.Context, spec Spec) (string, error) {
 		ctx, cancel = context.WithTimeout(ctx, spec.Timeout)
 		defer cancel()
 	}
-	out, err := osexec.CommandContext(ctx, "bash", "-c", spec.Command).CombinedOutput()
+	cmd := osexec.CommandContext(ctx, "bash", "-c", spec.Command)
+	cmd.Dir = spec.Dir
+	out, err := cmd.CombinedOutput()
 	return string(out), err
 }

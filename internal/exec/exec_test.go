@@ -17,6 +17,18 @@ func TestLocalRun(t *testing.T) {
 	}
 }
 
+func TestLocalRunInDir(t *testing.T) {
+	dir := t.TempDir()
+	out, err := Local{}.Run(context.Background(), Spec{Command: "pwd", Dir: dir})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	// macOS /var -> /private/var symlink; match on suffix.
+	if !strings.HasSuffix(strings.TrimSpace(out), strings.TrimPrefix(dir, "/private")) {
+		t.Errorf("pwd = %q, want dir %q", strings.TrimSpace(out), dir)
+	}
+}
+
 func TestLocalRunFailure(t *testing.T) {
 	_, err := Local{}.Run(context.Background(), Spec{Command: "exit 3"})
 	if err == nil {
