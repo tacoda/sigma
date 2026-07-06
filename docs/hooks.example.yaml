@@ -29,6 +29,12 @@ hooks:
     match: { tool: "write_file|edit_file" }
     run: ./scripts/format.sh
 
+  # Output-validation gate: a Stop hook that exits non-zero forces the agent to
+  # keep working (the command output is fed back as the fix-it reason), up to a
+  # few retries. Requires tests/vet to pass before a turn may finish.
+  - on: Stop
+    run: go test ./... && go vet ./...
+
   # Observe the loop.
   - on: PostLLMResponse
     log: "llm response for {tool}"

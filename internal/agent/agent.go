@@ -18,6 +18,13 @@ const maxTokens = 4096
 // run unbounded API requests.
 const maxIterations = 50
 
+// maxStopRetries bounds how many times a Stop-gate rejection (e.g. a failing
+// test/lint validation hook) can force the turn to continue before giving up.
+const maxStopRetries = 3
+
+// stopRetryPrefix introduces the validation feedback fed back to the model.
+const stopRetryPrefix = "A validation gate rejected this result. Fix the following, then finish:\n\n"
+
 var (
 	errDenied  = errors.New("denied by user")
 	errBlocked = errors.New("blocked by hook")
@@ -88,6 +95,7 @@ func (a *Agent) Run(ctx context.Context, input string) error {
 	a.messages = append(a.messages, message.UserText(input))
 	a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.UserPrompt, Prompt: input})
 
+	stopBlocks := 0
 	for i := 0; i < maxIterations; i++ {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -109,8 +117,18 @@ func (a *Agent) Run(ctx context.Context, input string) error {
 		a.cfg.UI.Usage(result.Usage.InputTokens, result.Usage.OutputTokens)
 
 		if result.StopReason != "tool_use" {
-			a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.Stop})
-			return nil
+			o := a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.Stop})
+			if !o.Block {
+				return nil
+			}
+			// A validation gate rejected the result. Feed the reason back and
+			// let the model fix it, bounded by maxStopRetries.
+			stopBlocks++
+			if stopBlocks > maxStopRetries {
+				return fmt.Errorf("validation gate still failing after %d attempts: %s", maxStopRetries, o.Reason)
+			}
+			a.messages = append(a.messages, message.UserText(stopRetryPrefix+o.Reason))
+			continue
 		}
 		a.messages = append(a.messages, message.Message{
 			Role:    "user",
