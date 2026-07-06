@@ -29,12 +29,12 @@ func TestRunGolden(t *testing.T) {
 	echo := &echoTool{}
 
 	a := agent.New(agent.Config{
-		Client:   streamer,
-		Tools:    tools.NewRegistry(echo),
-		Approver: approver,
-		UI:       ui,
-		Model:    "test-model",
-		System:   "test-system",
+		Client:     streamer,
+		Tools:      tools.NewRegistry(echo),
+		Permission: approver,
+		UI:         ui,
+		Model:      "test-model",
+		System:     "test-system",
 	})
 
 	if err := a.Run(context.Background(), "please echo hello"); err != nil {

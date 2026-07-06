@@ -35,8 +35,9 @@ type UI interface {
 	Usage(inTokens, outTokens int)
 }
 
-// Approver decides whether a mutating tool may run.
-type Approver interface {
+// PermissionPolicy decides whether a mutating tool may run. Adapters include
+// interactive prompting, auto-approve, and a config allowlist.
+type PermissionPolicy interface {
 	Allow(name, detail string) bool
 }
 
@@ -54,13 +55,13 @@ type Hooks interface {
 
 // Config holds an agent's collaborators.
 type Config struct {
-	Client   LLM
-	Tools    *tools.Registry
-	Approver Approver
-	UI       UI
-	Hooks    Hooks
-	Model    string
-	System   string
+	Client     LLM
+	Tools      *tools.Registry
+	Permission PermissionPolicy
+	UI         UI
+	Hooks      Hooks
+	Model      string
+	System     string
 }
 
 // Agent holds conversation state across turns.
@@ -130,7 +131,7 @@ func (a *Agent) runTools(ctx context.Context, uses []message.Block) []message.Bl
 			results = append(results, toolResult(use.ID, reason, errBlocked))
 			continue
 		}
-		if !a.cfg.Tools.ReadOnly(use.Name) && !a.cfg.Approver.Allow(use.Name, input) {
+		if !a.cfg.Tools.ReadOnly(use.Name) && !a.cfg.Permission.Allow(use.Name, input) {
 			results = append(results, toolResult(use.ID, "", errDenied))
 			continue
 		}

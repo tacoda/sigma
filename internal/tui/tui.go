@@ -1,7 +1,7 @@
 // Package tui is an interactive multi-turn chat front-end built on Bubble Tea.
 //
 // The agent runs in a background goroutine. It talks to the UI through a bridge
-// that satisfies agent.UI and agent.Approver: streamed text and tool calls are
+// that satisfies agent.UI and agent.PermissionPolicy: streamed text and tool calls are
 // pushed into the Bubble Tea event loop via Program.Send, and permission
 // requests block the agent goroutine on a reply channel until the user answers.
 package tui
@@ -103,11 +103,11 @@ func Run(cfg Config) error {
 	b.preApprove(cfg.Allowed)
 
 	base := agent.Config{
-		Client:   cfg.Client,
-		Approver: b,
-		Hooks:    cfg.Hooks,
-		Model:    cfg.Model,
-		System:   cfg.System,
+		Client:     cfg.Client,
+		Permission: b,
+		Hooks:      cfg.Hooks,
+		Model:      cfg.Model,
+		System:     cfg.System,
 	}
 	base.Tools = agent.WithSubagent(base, cfg.ChildTools)
 	base.UI = b

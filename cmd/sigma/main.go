@@ -224,11 +224,11 @@ func runAgent(args []string) {
 	gate.PreApprove(d.allowed...)
 
 	base := agent.Config{
-		Client:   d.client,
-		Approver: gate,
-		Hooks:    d.hooks,
-		Model:    d.model,
-		System:   d.system,
+		Client:     d.client,
+		Permission: gate,
+		Hooks:      d.hooks,
+		Model:      d.model,
+		System:     d.system,
 	}
 	base.Tools = agent.WithSubagent(base, d.childTools)
 	base.UI = consoleUI{}
