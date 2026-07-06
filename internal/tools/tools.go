@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/tacoda/sigma/internal/exec"
 	"github.com/tacoda/sigma/internal/message"
 )
 
@@ -26,7 +27,7 @@ type Tool interface {
 func FS(root string) []Tool {
 	return []Tool{
 		ReadFile{Root: root}, WriteFile{Root: root}, EditFile{Root: root},
-		Bash{}, Glob{Root: root}, Grep{Root: root}, Worktree{},
+		Bash{Exec: exec.Local{Dir: root}}, Glob{Root: root}, Grep{Root: root}, Worktree{},
 	}
 }
 

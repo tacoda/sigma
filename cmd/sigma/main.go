@@ -23,6 +23,7 @@ import (
 	"github.com/tacoda/sigma/internal/skills"
 	"github.com/tacoda/sigma/internal/tools"
 	"github.com/tacoda/sigma/internal/tui"
+	"github.com/tacoda/sigma/internal/workspace"
 )
 
 // consoleUI prints agent output to the terminal (used by `run`).
@@ -151,16 +152,17 @@ func authTest() {
 	fmt.Printf("tokens: in=%d out=%d\n", resp.Usage.InputTokens, resp.Usage.OutputTokens)
 }
 
-// deps are the shared building blocks for an agent session. childTools are the
-// tools a sub-agent may use; the parent registry adds a `task` tool on top.
+// deps are the shared building blocks for an agent session. newTools builds the
+// tool set for a workspace root (cwd by default; a worktree when isolating).
 type deps struct {
-	client     *anthropic.Client
-	childTools []tools.Tool
-	bus        hooks.Bus
-	model      string
-	system     string
-	allowed    []string
-	cleanup    func()
+	client   *anthropic.Client
+	newTools func(root string) []tools.Tool
+	isolate  bool
+	bus      hooks.Bus
+	model    string
+	system   string
+	allowed  []string
+	cleanup  func()
 }
 
 // hookDebug logs every event to stderr when SIGMA_HOOK_DEBUG is set.
@@ -192,10 +194,12 @@ func buildDeps() deps {
 		model = cfg.Model
 	}
 
-	childTools := tools.FS("")
+	// extra tools are workspace-root-independent (skills, MCP); the file tools
+	// are rebuilt per root by newTools.
+	var extra []tools.Tool
 	sources := []prompt.Source{rules.Source{}}
 	if sk := skills.Load(); len(sk) > 0 {
-		childTools = append(childTools, skills.NewTool(sk))
+		extra = append(extra, skills.NewTool(sk))
 		sources = append(sources, sk)
 	}
 	system, err := prompt.Assemble(sources...)
@@ -213,18 +217,23 @@ func buildDeps() deps {
 	cleanup := func() {}
 	if len(cfg.MCPServers) > 0 {
 		client, mcpTools := mcp.Connect(context.Background(), cfg.MCPServers)
-		childTools = append(childTools, mcpTools...)
+		extra = append(extra, mcpTools...)
 		cleanup = client.Close
 	}
 
+	newTools := func(root string) []tools.Tool {
+		return append(tools.FS(root), extra...)
+	}
+
 	return deps{
-		client:     loadClient(),
-		childTools: childTools,
-		bus:        bus,
-		model:      model,
-		system:     system,
-		allowed:    cfg.AllowedTools,
-		cleanup:    cleanup,
+		client:   loadClient(),
+		newTools: newTools,
+		isolate:  cfg.Isolate,
+		bus:      bus,
+		model:    model,
+		system:   system,
+		allowed:  cfg.AllowedTools,
+		cleanup:  cleanup,
 	}
 }
 
@@ -253,7 +262,11 @@ func runAgent(args []string) {
 		Model:      d.model,
 		System:     d.system,
 	}
-	base.Tools = agent.WithSubagent(base, d.childTools)
+	base.Tools = agent.WithSubagent(base, agent.SubagentOptions{
+		Tools:     d.newTools,
+		Isolate:   d.isolate,
+		Workspace: workspace.Git{},
+	})
 	base.UI = consoleUI{}
 	a := agent.New(base)
 
@@ -274,14 +287,15 @@ func runChat(args []string) {
 	d := buildDeps()
 	defer d.cleanup()
 	cfg := tui.Config{
-		Client:     d.client,
-		ChildTools: d.childTools,
-		Hooks:      d.bus,
-		Allowed:    d.allowed,
-		Model:      d.model,
-		System:     d.system,
-		Store:      session.Store{},
-		Resume:     resume,
+		Client:   d.client,
+		NewTools: d.newTools,
+		Isolate:  d.isolate,
+		Hooks:    d.bus,
+		Allowed:  d.allowed,
+		Model:    d.model,
+		System:   d.system,
+		Store:    session.Store{},
+		Resume:   resume,
 	}
 	if err := tui.Run(cfg); err != nil {
 		fmt.Fprintln(os.Stderr, "chat failed:", err)

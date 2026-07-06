@@ -19,6 +19,7 @@ import (
 	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/tools"
+	"github.com/tacoda/sigma/internal/workspace"
 )
 
 // SessionStore persists the conversation so a session can be resumed.
@@ -88,14 +89,15 @@ func (b *bridge) Allow(name, detail string) bool {
 
 // Config holds everything needed to start a chat session.
 type Config struct {
-	Client     agent.LLM
-	ChildTools []tools.Tool
-	Hooks      hooks.Bus
-	Allowed    []string
-	Model      string
-	System     string
-	Store      SessionStore
-	Resume     bool
+	Client   agent.LLM
+	NewTools func(root string) []tools.Tool
+	Isolate  bool
+	Hooks    hooks.Bus
+	Allowed  []string
+	Model    string
+	System   string
+	Store    SessionStore
+	Resume   bool
 }
 
 // Run starts the interactive chat session and blocks until the user quits.
@@ -113,7 +115,11 @@ func Run(cfg Config) error {
 		Model:      cfg.Model,
 		System:     cfg.System,
 	}
-	base.Tools = agent.WithSubagent(base, cfg.ChildTools)
+	base.Tools = agent.WithSubagent(base, agent.SubagentOptions{
+		Tools:     cfg.NewTools,
+		Isolate:   cfg.Isolate,
+		Workspace: workspace.Git{},
+	})
 	base.UI = b
 	a := agent.New(base)
 

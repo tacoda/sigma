@@ -21,6 +21,8 @@ type Settings struct {
 	MCPServers map[string]MCPServer `json:"mcpServers,omitempty"`
 	// Hooks are shell commands run around tool execution, keyed by event.
 	Hooks map[string][]string `json:"hooks,omitempty"`
+	// Isolate runs each sub-agent task in a fresh git worktree.
+	Isolate bool `json:"isolate,omitempty"`
 }
 
 // MCPServer describes one MCP server: a stdio command, or an HTTP URL.
@@ -52,6 +54,9 @@ func merge(s *Settings, path string) {
 	}
 	if f.Model != "" {
 		s.Model = f.Model
+	}
+	if f.Isolate {
+		s.Isolate = true
 	}
 	s.AllowedTools = append(s.AllowedTools, f.AllowedTools...)
 	for name, srv := range f.MCPServers {

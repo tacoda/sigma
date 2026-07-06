@@ -23,17 +23,22 @@ type Executor interface {
 	Run(ctx context.Context, spec Spec) (output string, err error)
 }
 
-// Local runs commands on the host with no isolation.
-type Local struct{}
+// Local runs commands on the host with no isolation. Dir is the default working
+// directory; a per-call Spec.Dir overrides it.
+type Local struct{ Dir string }
 
-func (Local) Run(ctx context.Context, spec Spec) (string, error) {
+func (l Local) Run(ctx context.Context, spec Spec) (string, error) {
 	if spec.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, spec.Timeout)
 		defer cancel()
 	}
+	dir := spec.Dir
+	if dir == "" {
+		dir = l.Dir
+	}
 	cmd := osexec.CommandContext(ctx, "bash", "-c", spec.Command)
-	cmd.Dir = spec.Dir
+	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
