@@ -33,6 +33,8 @@ const (
 	PreTool      Kind = "PreToolUse"
 	PostTool     Kind = "PostToolUse"
 	ToolError    Kind = "ToolError"
+	PreCompact   Kind = "PreCompact"
+	PostCompact  Kind = "PostCompact"
 	Stop         Kind = "Stop"
 	Notification Kind = "Notification"
 )
@@ -40,7 +42,7 @@ const (
 // AllKinds lists every event kind, for handlers that tap all events.
 var AllKinds = []Kind{
 	SessionStart, SessionEnd, UserPrompt, PreLLM, PostLLM,
-	PreTool, PostTool, ToolError, Stop, Notification,
+	PreTool, PostTool, ToolError, PreCompact, PostCompact, Stop, Notification,
 }
 
 // Event is one lifecycle event. Fields are populated by kind.

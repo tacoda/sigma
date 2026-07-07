@@ -29,6 +29,9 @@ type Settings struct {
 	EventLog string `json:"eventLog,omitempty"`
 	// PermissionMode gates mutating tools: default, acceptEdits, plan, bypass.
 	PermissionMode string `json:"permissionMode,omitempty"`
+	// CompactAt summarizes history once a request's input tokens reach this
+	// count. 0 disables compaction.
+	CompactAt int `json:"compactAt,omitempty"`
 }
 
 // Sandbox configures command confinement.
@@ -79,6 +82,9 @@ func merge(s *Settings, path string) {
 	}
 	if f.PermissionMode != "" {
 		s.PermissionMode = f.PermissionMode
+	}
+	if f.CompactAt != 0 {
+		s.CompactAt = f.CompactAt
 	}
 	s.AllowedTools = append(s.AllowedTools, f.AllowedTools...)
 	for name, srv := range f.MCPServers {

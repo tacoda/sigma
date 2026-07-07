@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/message"
@@ -69,12 +70,16 @@ type Config struct {
 	Hooks      hooks.Bus
 	Model      string
 	System     string
+	// CompactAt summarizes the history once a request's input tokens reach this
+	// count. 0 disables compaction.
+	CompactAt int
 }
 
 // Agent holds conversation state across turns.
 type Agent struct {
-	cfg      Config
-	messages []message.Message
+	cfg       Config
+	messages  []message.Message
+	lastInput int // input tokens of the most recent request
 }
 
 // New creates an agent. A nil Hooks is replaced with a no-op.
@@ -97,6 +102,10 @@ func (a *Agent) Reset() { a.messages = nil }
 // Run processes one user input, looping through any tool calls until the model
 // produces a final answer.
 func (a *Agent) Run(ctx context.Context, input string) error {
+	// Compact prior history at the turn boundary (clean, no split tool pairs).
+	if a.shouldCompact() {
+		a.compact(ctx)
+	}
 	// UserPromptSubmit gate: a block rejects the prompt before any model call.
 	if o := a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.UserPrompt, Prompt: input}); o.Block {
 		a.cfg.UI.Text(promptRejected + o.Reason)
@@ -121,6 +130,7 @@ func (a *Agent) Run(ctx context.Context, input string) error {
 			return err
 		}
 		a.messages = append(a.messages, message.Message{Role: "assistant", Content: result.Content})
+		a.lastInput = result.Usage.InputTokens
 		o := a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.PostLLM,
 			InTokens: result.Usage.InputTokens, OutTokens: result.Usage.OutputTokens})
 		a.cfg.UI.Usage(result.Usage.InputTokens, result.Usage.OutputTokens)
@@ -156,6 +166,38 @@ func (a *Agent) Run(ctx context.Context, input string) error {
 		})
 	}
 	return fmt.Errorf("exceeded max tool iterations (%d)", maxIterations)
+}
+
+const (
+	compactMaxTokens   = 2048
+	compactSystem      = "You compact a coding session into a concise summary for continuation."
+	compactInstruction = "Summarize the conversation so far. Preserve the user's goals, decisions made, files changed and how, commands run and their results, and any open tasks. Be concise but complete enough to keep working."
+	compactedPrefix    = "Summary of the conversation so far:\n\n"
+)
+
+// shouldCompact reports whether the history has grown past the configured
+// threshold and is worth summarizing.
+func (a *Agent) shouldCompact() bool {
+	return a.cfg.CompactAt > 0 && a.lastInput >= a.cfg.CompactAt && len(a.messages) >= 2
+}
+
+// compact summarizes the current history into a single message. On any failure
+// the history is left untouched, so compaction never breaks a turn.
+func (a *Agent) compact(ctx context.Context) {
+	a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.PreCompact})
+	msgs := append(append([]message.Message{}, a.messages...), message.UserText(compactInstruction))
+	res, err := a.cfg.Client.Stream(ctx, message.Request{
+		Model:     a.cfg.Model,
+		MaxTokens: compactMaxTokens,
+		System:    compactSystem,
+		Messages:  msgs,
+	}, nil)
+	if err != nil || strings.TrimSpace(res.Text()) == "" {
+		return
+	}
+	a.messages = []message.Message{message.UserText(compactedPrefix + res.Text())}
+	a.lastInput = 0
+	a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.PostCompact})
 }
 
 // runTools executes each requested tool and returns the tool_result blocks.

@@ -157,15 +157,16 @@ func authTest() {
 // deps are the shared building blocks for an agent session. newTools builds the
 // tool set for a workspace root (cwd by default; a worktree when isolating).
 type deps struct {
-	client   *anthropic.Client
-	newTools func(root string) []tools.Tool
-	isolate  bool
-	permMode permission.Mode
-	bus      hooks.Bus
-	model    string
-	system   string
-	allowed  []string
-	cleanup  func()
+	client    *anthropic.Client
+	newTools  func(root string) []tools.Tool
+	isolate   bool
+	permMode  permission.Mode
+	compactAt int
+	bus       hooks.Bus
+	model     string
+	system    string
+	allowed   []string
+	cleanup   func()
 }
 
 // hookDebug logs every event to stderr when SIGMA_HOOK_DEBUG is set.
@@ -266,15 +267,16 @@ func buildDeps() deps {
 	}
 
 	return deps{
-		client:   loadClient(),
-		newTools: newTools,
-		isolate:  cfg.Isolate,
-		permMode: permission.ParseMode(cfg.PermissionMode),
-		bus:      bus,
-		model:    model,
-		system:   system,
-		allowed:  cfg.AllowedTools,
-		cleanup:  cleanup,
+		client:    loadClient(),
+		newTools:  newTools,
+		isolate:   cfg.Isolate,
+		permMode:  permission.ParseMode(cfg.PermissionMode),
+		compactAt: cfg.CompactAt,
+		bus:       bus,
+		model:     model,
+		system:    system,
+		allowed:   cfg.AllowedTools,
+		cleanup:   cleanup,
 	}
 }
 
@@ -303,6 +305,7 @@ func runAgent(args []string) {
 		Hooks:      d.bus,
 		Model:      d.model,
 		System:     d.system,
+		CompactAt:  d.compactAt,
 	}
 	base.Tools = agent.WithSubagent(base, agent.SubagentOptions{
 		Tools:     d.newTools,
@@ -329,16 +332,17 @@ func runChat(args []string) {
 	d := buildDeps()
 	defer d.cleanup()
 	cfg := tui.Config{
-		Client:   d.client,
-		NewTools: d.newTools,
-		Isolate:  d.isolate,
-		Hooks:    d.bus,
-		Allowed:  d.allowed,
-		Model:    d.model,
-		System:   d.system,
-		Store:    session.Store{},
-		Mode:     d.permMode,
-		Resume:   resume,
+		Client:    d.client,
+		NewTools:  d.newTools,
+		Isolate:   d.isolate,
+		Hooks:     d.bus,
+		Allowed:   d.allowed,
+		Model:     d.model,
+		System:    d.system,
+		Store:     session.Store{},
+		Mode:      d.permMode,
+		CompactAt: d.compactAt,
+		Resume:    resume,
 	}
 	if err := tui.Run(cfg); err != nil {
 		fmt.Fprintln(os.Stderr, "chat failed:", err)

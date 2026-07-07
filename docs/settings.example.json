@@ -9,6 +9,7 @@
   },
   "eventLog": ".sigma/events.jsonl",
   "permissionMode": "acceptEdits",
+  "compactAt": 120000,
   "hooks": {
     "PreToolUse": ["./scripts/guard.sh"]
   }
