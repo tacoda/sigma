@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 
 	"github.com/tacoda/sigma/internal/agent"
@@ -172,6 +173,29 @@ func hookDebug(_ context.Context, ev hooks.Event) hooks.Outcome {
 	return hooks.Outcome{}
 }
 
+// eventLogPath resolves the event-log path: env override wins over config.
+func eventLogPath(cfg config.Settings) string {
+	if p := os.Getenv("SIGMA_EVENT_LOG"); p != "" {
+		return p
+	}
+	return cfg.EventLog
+}
+
+// openEventLog opens the JSONL event log for appending, creating its directory.
+// Returns nil on failure (logging is best-effort).
+func openEventLog(path string) *os.File {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, "event log:", err)
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "event log:", err)
+		return nil
+	}
+	return f
+}
+
 // buildBus composes the hook buses: in-process callbacks, declarative YAML
 // rules, then legacy shell commands from settings.json.
 func buildBus(shellHooks map[string][]string) (hooks.Bus, error) {
@@ -220,6 +244,15 @@ func buildDeps() deps {
 		client, mcpTools := mcp.Connect(context.Background(), cfg.MCPServers)
 		extra = append(extra, mcpTools...)
 		cleanup = client.Close
+	}
+
+	// Event-log sensor: record the event stream as JSONL if configured.
+	if path := eventLogPath(cfg); path != "" {
+		if f := openEventLog(path); f != nil {
+			bus = hooks.Multi{hooks.NewSink(f), bus}
+			prev := cleanup
+			cleanup = func() { f.Close(); prev() }
+		}
 	}
 
 	sb := cfg.Sandbox

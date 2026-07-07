@@ -25,6 +25,8 @@ type Settings struct {
 	Isolate bool `json:"isolate,omitempty"`
 	// Sandbox confines bash commands with the OS sandbox.
 	Sandbox Sandbox `json:"sandbox,omitempty"`
+	// EventLog, if set, is a path where the event stream is recorded as JSONL.
+	EventLog string `json:"eventLog,omitempty"`
 }
 
 // Sandbox configures command confinement.
@@ -69,6 +71,9 @@ func merge(s *Settings, path string) {
 	}
 	if f.Sandbox.Enabled {
 		s.Sandbox = f.Sandbox
+	}
+	if f.EventLog != "" {
+		s.EventLog = f.EventLog
 	}
 	s.AllowedTools = append(s.AllowedTools, f.AllowedTools...)
 	for name, srv := range f.MCPServers {

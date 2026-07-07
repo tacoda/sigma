@@ -7,6 +7,7 @@
     "network": false,
     "writable": []
   },
+  "eventLog": ".sigma/events.jsonl",
   "hooks": {
     "PreToolUse": ["./scripts/guard.sh"]
   }
