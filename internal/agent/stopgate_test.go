@@ -64,8 +64,8 @@ func TestStopGateGivesUpAfterCap(t *testing.T) {
 	if !strings.Contains(err.Error(), "validation gate") {
 		t.Errorf("err = %v, want validation-gate message", err)
 	}
-	// initial turn + maxStopRetries retries.
-	if client.calls != maxStopRetries+1 {
-		t.Errorf("Stream calls = %d, want %d", client.calls, maxStopRetries+1)
+	// initial turn + maxGateRetries retries.
+	if client.calls != maxGateRetries+1 {
+		t.Errorf("Stream calls = %d, want %d", client.calls, maxGateRetries+1)
 	}
 }

@@ -18,12 +18,17 @@ const maxTokens = 4096
 // run unbounded API requests.
 const maxIterations = 50
 
-// maxStopRetries bounds how many times a Stop-gate rejection (e.g. a failing
-// test/lint validation hook) can force the turn to continue before giving up.
-const maxStopRetries = 3
+// maxGateRetries bounds how many times a gate rejection (a failing Stop
+// validation hook, or a rejected LLM response) can force the turn to continue
+// before giving up.
+const maxGateRetries = 3
 
-// stopRetryPrefix introduces the validation feedback fed back to the model.
-const stopRetryPrefix = "A validation gate rejected this result. Fix the following, then finish:\n\n"
+// Feedback prefixes fed back to the model when a gate rejects.
+const (
+	stopRetryPrefix = "A validation gate rejected this result. Fix the following, then finish:\n\n"
+	respRetryPrefix = "A response gate rejected that reply. Address this, then continue:\n\n"
+	promptRejected  = "⛔ prompt rejected: "
+)
 
 var (
 	errDenied  = errors.New("denied by user")
@@ -92,10 +97,14 @@ func (a *Agent) Reset() { a.messages = nil }
 // Run processes one user input, looping through any tool calls until the model
 // produces a final answer.
 func (a *Agent) Run(ctx context.Context, input string) error {
+	// UserPromptSubmit gate: a block rejects the prompt before any model call.
+	if o := a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.UserPrompt, Prompt: input}); o.Block {
+		a.cfg.UI.Text(promptRejected + o.Reason)
+		return nil
+	}
 	a.messages = append(a.messages, message.UserText(input))
-	a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.UserPrompt, Prompt: input})
 
-	stopBlocks := 0
+	stopBlocks, respBlocks := 0, 0
 	for i := 0; i < maxIterations; i++ {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -112,20 +121,31 @@ func (a *Agent) Run(ctx context.Context, input string) error {
 			return err
 		}
 		a.messages = append(a.messages, message.Message{Role: "assistant", Content: result.Content})
-		a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.PostLLM,
+		o := a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.PostLLM,
 			InTokens: result.Usage.InputTokens, OutTokens: result.Usage.OutputTokens})
 		a.cfg.UI.Usage(result.Usage.InputTokens, result.Usage.OutputTokens)
 
+		// PostLLMResponse gate: a block rejects this reply before tools run;
+		// feed the reason back and re-request.
+		if o.Block {
+			respBlocks++
+			if respBlocks > maxGateRetries {
+				return fmt.Errorf("response gate still failing after %d attempts: %s", maxGateRetries, o.Reason)
+			}
+			a.messages = append(a.messages, message.UserText(respRetryPrefix+o.Reason))
+			continue
+		}
+
 		if result.StopReason != "tool_use" {
-			o := a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.Stop})
+			o = a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.Stop})
 			if !o.Block {
 				return nil
 			}
 			// A validation gate rejected the result. Feed the reason back and
 			// let the model fix it, bounded by maxStopRetries.
 			stopBlocks++
-			if stopBlocks > maxStopRetries {
-				return fmt.Errorf("validation gate still failing after %d attempts: %s", maxStopRetries, o.Reason)
+			if stopBlocks > maxGateRetries {
+				return fmt.Errorf("validation gate still failing after %d attempts: %s", maxGateRetries, o.Reason)
 			}
 			a.messages = append(a.messages, message.UserText(stopRetryPrefix+o.Reason))
 			continue
