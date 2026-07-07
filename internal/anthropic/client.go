@@ -36,9 +36,24 @@ func New(token string) *Client {
 	return &Client{token: token, http: &http.Client{Timeout: 300 * time.Second}}
 }
 
-type textBlock struct {
+// cacheControl marks a block as a prompt-cache breakpoint.
+type cacheControl struct {
 	Type string `json:"type"`
-	Text string `json:"text"`
+}
+
+var ephemeral = &cacheControl{Type: "ephemeral"}
+
+type textBlock struct {
+	Type         string        `json:"type"`
+	Text         string        `json:"text"`
+	CacheControl *cacheControl `json:"cache_control,omitempty"`
+}
+
+type wireTool struct {
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	InputSchema  json.RawMessage `json:"input_schema"`
+	CacheControl *cacheControl   `json:"cache_control,omitempty"`
 }
 
 type wireRequest struct {
@@ -46,8 +61,37 @@ type wireRequest struct {
 	MaxTokens int               `json:"max_tokens"`
 	System    []textBlock       `json:"system"`
 	Messages  []message.Message `json:"messages"`
-	Tools     []message.Tool    `json:"tools,omitempty"`
+	Tools     []wireTool        `json:"tools,omitempty"`
 	Stream    bool              `json:"stream"`
+}
+
+// wireOf converts a request to the wire form, placing prompt-cache breakpoints
+// on the static prefix: the last system block and the last tool. System and
+// tools are identical across a session's turns, so every turn after the first
+// hits the cache.
+func wireOf(req message.Request) wireRequest {
+	system := []textBlock{{Type: "text", Text: cliIdentity}}
+	if req.System != "" {
+		system = append(system, textBlock{Type: "text", Text: req.System})
+	}
+	system[len(system)-1].CacheControl = ephemeral
+
+	tools := make([]wireTool, len(req.Tools))
+	for i, t := range req.Tools {
+		tools[i] = wireTool{Name: t.Name, Description: t.Description, InputSchema: t.InputSchema}
+	}
+	if len(tools) > 0 {
+		tools[len(tools)-1].CacheControl = ephemeral
+	}
+
+	return wireRequest{
+		Model:     req.Model,
+		MaxTokens: req.MaxTokens,
+		System:    system,
+		Messages:  req.Messages,
+		Tools:     tools,
+		Stream:    true,
+	}
 }
 
 // Complete sends a request and returns the full response (streamed internally,
@@ -73,18 +117,7 @@ func (c *Client) Stream(ctx context.Context, req message.Request, onText func(st
 }
 
 func (c *Client) post(ctx context.Context, req message.Request) (*http.Response, error) {
-	system := []textBlock{{Type: "text", Text: cliIdentity}}
-	if req.System != "" {
-		system = append(system, textBlock{Type: "text", Text: req.System})
-	}
-	body, err := json.Marshal(wireRequest{
-		Model:     req.Model,
-		MaxTokens: req.MaxTokens,
-		System:    system,
-		Messages:  req.Messages,
-		Tools:     req.Tools,
-		Stream:    true,
-	})
+	body, err := json.Marshal(wireOf(req))
 	if err != nil {
 		return nil, err
 	}
