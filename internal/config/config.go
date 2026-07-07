@@ -36,6 +36,8 @@ type Settings struct {
 	OutputStyle string `json:"outputStyle,omitempty"`
 	// Plugins are the names of extra plugin bundles to mount.
 	Plugins []string `json:"plugins,omitempty"`
+	// PluginConfig holds per-plugin raw JSON config, keyed by plugin name.
+	PluginConfig map[string]json.RawMessage `json:"pluginConfig,omitempty"`
 }
 
 // Sandbox configures command confinement.
@@ -94,6 +96,12 @@ func merge(s *Settings, path string) {
 		s.OutputStyle = f.OutputStyle
 	}
 	s.Plugins = append(s.Plugins, f.Plugins...)
+	for k, v := range f.PluginConfig {
+		if s.PluginConfig == nil {
+			s.PluginConfig = map[string]json.RawMessage{}
+		}
+		s.PluginConfig[k] = v
+	}
 	s.AllowedTools = append(s.AllowedTools, f.AllowedTools...)
 	for name, srv := range f.MCPServers {
 		if s.MCPServers == nil {

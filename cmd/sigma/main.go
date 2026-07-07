@@ -21,7 +21,8 @@ import (
 	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/permission"
 	"github.com/tacoda/sigma/internal/plugin"
-	_ "github.com/tacoda/sigma/internal/plugins/telemetry" // register built-in plugin
+	_ "github.com/tacoda/sigma/internal/plugins/codehealth" // register built-in plugin
+	_ "github.com/tacoda/sigma/internal/plugins/telemetry"  // register built-in plugin
 	"github.com/tacoda/sigma/internal/prompt"
 	"github.com/tacoda/sigma/internal/rules"
 	"github.com/tacoda/sigma/internal/session"
@@ -227,7 +228,7 @@ func buildDeps() deps {
 	}
 
 	// Mount enabled plugin bundles; they contribute tools, sources, and hooks.
-	host, err := plugin.Mount(cfg.Plugins)
+	host, err := plugin.Mount(cfg.Plugins, cfg.PluginConfig)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "mount plugins:", err)
 		os.Exit(1)

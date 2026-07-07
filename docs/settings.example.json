@@ -11,7 +11,10 @@
   "permissionMode": "acceptEdits",
   "compactAt": 120000,
   "outputStyle": "concise",
-  "plugins": ["telemetry"],
+  "plugins": ["telemetry", "codehealth"],
+  "pluginConfig": {
+    "codehealth": { "checks": ["go test ./...", "go vet ./..."] }
+  },
   "hooks": {
     "PreToolUse": ["./scripts/guard.sh"]
   }

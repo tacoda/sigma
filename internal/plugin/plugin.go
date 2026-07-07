@@ -8,6 +8,7 @@
 package plugin
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -15,6 +16,9 @@ import (
 	"github.com/tacoda/sigma/internal/prompt"
 	"github.com/tacoda/sigma/internal/tools"
 )
+
+// Config is a plugin's raw JSON configuration (nil if none was provided).
+type Config = json.RawMessage
 
 // Host collects what mounted plugins contribute.
 type Host struct {
@@ -27,10 +31,11 @@ func (h *Host) AddTool(t tools.Tool)      { h.Tools = append(h.Tools, t) }
 func (h *Host) AddSource(s prompt.Source) { h.Sources = append(h.Sources, s) }
 func (h *Host) AddHook(b hooks.Bus)       { h.Hooks = append(h.Hooks, b) }
 
-// Plugin is an optional bundle of contributions.
+// Plugin is an optional bundle of contributions. Register receives the plugin's
+// config (may be nil).
 type Plugin interface {
 	Name() string
-	Register(*Host) error
+	Register(*Host, Config) error
 }
 
 var registry = map[string]Plugin{}
@@ -50,14 +55,14 @@ func Available() []string {
 
 // Mount registers the named plugins into a fresh Host. An unknown name is an
 // error so a typo fails loudly rather than silently disabling a layer.
-func Mount(enabled []string) (*Host, error) {
+func Mount(enabled []string, cfgs map[string]Config) (*Host, error) {
 	h := &Host{}
 	for _, name := range enabled {
 		p, ok := registry[name]
 		if !ok {
 			return nil, fmt.Errorf("unknown plugin %q (available: %v)", name, Available())
 		}
-		if err := p.Register(h); err != nil {
+		if err := p.Register(h, cfgs[name]); err != nil {
 			return nil, fmt.Errorf("plugin %q: %w", name, err)
 		}
 	}

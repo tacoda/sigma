@@ -9,7 +9,7 @@ import (
 type fakePlugin struct{ name string }
 
 func (f fakePlugin) Name() string { return f.name }
-func (fakePlugin) Register(h *Host) error {
+func (fakePlugin) Register(h *Host, _ Config) error {
 	h.AddHook(hooks.Nop{})
 	return nil
 }
@@ -17,7 +17,7 @@ func (fakePlugin) Register(h *Host) error {
 func TestMountKnownAndUnknown(t *testing.T) {
 	Register(fakePlugin{"fake"})
 
-	h, err := Mount([]string{"fake"})
+	h, err := Mount([]string{"fake"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestMountKnownAndUnknown(t *testing.T) {
 		t.Errorf("mounted host has %d hooks, want 1", len(h.Hooks))
 	}
 
-	if _, err := Mount([]string{"ghost"}); err == nil {
+	if _, err := Mount([]string{"ghost"}, nil); err == nil {
 		t.Error("unknown plugin should error")
 	}
 }

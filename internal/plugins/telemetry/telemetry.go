@@ -21,7 +21,7 @@ type plug struct{}
 
 func (plug) Name() string { return "telemetry" }
 
-func (plug) Register(h *plugin.Host) error {
+func (plug) Register(h *plugin.Host, _ plugin.Config) error {
 	t := &counter{counts: map[hooks.Kind]int{}}
 	h.AddHook(t)            // sensor: observe every event
 	h.AddTool(statsTool{t}) // tool: read the counts

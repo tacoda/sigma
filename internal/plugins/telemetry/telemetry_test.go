@@ -10,7 +10,7 @@ import (
 )
 
 func TestTelemetryPlugin(t *testing.T) {
-	h, err := plugin.Mount([]string{"telemetry"}) // init() registered it on import
+	h, err := plugin.Mount([]string{"telemetry"}, nil) // init() registered it on import
 	if err != nil {
 		t.Fatal(err)
 	}
