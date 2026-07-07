@@ -24,6 +24,7 @@ import (
 	"github.com/tacoda/sigma/internal/rules"
 	"github.com/tacoda/sigma/internal/session"
 	"github.com/tacoda/sigma/internal/skills"
+	"github.com/tacoda/sigma/internal/styles"
 	"github.com/tacoda/sigma/internal/tools"
 	"github.com/tacoda/sigma/internal/tui"
 	"github.com/tacoda/sigma/internal/workspace"
@@ -227,6 +228,13 @@ func buildDeps() deps {
 	// are rebuilt per root by newTools.
 	var extra []tools.Tool
 	sources := []prompt.Source{rules.Source{}}
+	if cfg.OutputStyle != "" {
+		if st, ok := styles.Load()[cfg.OutputStyle]; ok {
+			sources = append(sources, st)
+		} else {
+			fmt.Fprintf(os.Stderr, "output style %q not found; ignoring\n", cfg.OutputStyle)
+		}
+	}
 	if sk := skills.Load(); len(sk) > 0 {
 		extra = append(extra, skills.NewTool(sk))
 		sources = append(sources, sk)

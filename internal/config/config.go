@@ -32,6 +32,8 @@ type Settings struct {
 	// CompactAt summarizes history once a request's input tokens reach this
 	// count. 0 disables compaction.
 	CompactAt int `json:"compactAt,omitempty"`
+	// OutputStyle names an output style whose prompt shapes the agent's voice.
+	OutputStyle string `json:"outputStyle,omitempty"`
 }
 
 // Sandbox configures command confinement.
@@ -85,6 +87,9 @@ func merge(s *Settings, path string) {
 	}
 	if f.CompactAt != 0 {
 		s.CompactAt = f.CompactAt
+	}
+	if f.OutputStyle != "" {
+		s.OutputStyle = f.OutputStyle
 	}
 	s.AllowedTools = append(s.AllowedTools, f.AllowedTools...)
 	for name, srv := range f.MCPServers {

@@ -10,6 +10,7 @@
   "eventLog": ".sigma/events.jsonl",
   "permissionMode": "acceptEdits",
   "compactAt": 120000,
+  "outputStyle": "concise",
   "hooks": {
     "PreToolUse": ["./scripts/guard.sh"]
   }
