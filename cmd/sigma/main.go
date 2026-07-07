@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/tacoda/sigma/internal/agent"
+	"github.com/tacoda/sigma/internal/agents"
 	"github.com/tacoda/sigma/internal/anthropic"
 	"github.com/tacoda/sigma/internal/auth"
 	"github.com/tacoda/sigma/internal/config"
@@ -159,6 +160,7 @@ func authTest() {
 type deps struct {
 	client    *anthropic.Client
 	newTools  func(root string) []tools.Tool
+	types     agents.Set
 	isolate   bool
 	permMode  permission.Mode
 	compactAt int
@@ -269,6 +271,7 @@ func buildDeps() deps {
 	return deps{
 		client:    loadClient(),
 		newTools:  newTools,
+		types:     agents.Load(),
 		isolate:   cfg.Isolate,
 		permMode:  permission.ParseMode(cfg.PermissionMode),
 		compactAt: cfg.CompactAt,
@@ -309,6 +312,7 @@ func runAgent(args []string) {
 	}
 	base.Tools = agent.WithSubagent(base, agent.SubagentOptions{
 		Tools:     d.newTools,
+		Types:     d.types,
 		Isolate:   d.isolate,
 		Workspace: workspace.Git{},
 	})
@@ -334,6 +338,7 @@ func runChat(args []string) {
 	cfg := tui.Config{
 		Client:    d.client,
 		NewTools:  d.newTools,
+		Types:     d.types,
 		Isolate:   d.isolate,
 		Hooks:     d.bus,
 		Allowed:   d.allowed,

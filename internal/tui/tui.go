@@ -15,6 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/tacoda/sigma/internal/agent"
+	"github.com/tacoda/sigma/internal/agents"
 	"github.com/tacoda/sigma/internal/commands"
 	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/message"
@@ -92,6 +93,7 @@ func (b *bridge) Allow(name, detail string) bool {
 type Config struct {
 	Client    agent.LLM
 	NewTools  func(root string) []tools.Tool
+	Types     agents.Set
 	Isolate   bool
 	Hooks     hooks.Bus
 	Allowed   []string
@@ -121,6 +123,7 @@ func Run(cfg Config) error {
 	}
 	base.Tools = agent.WithSubagent(base, agent.SubagentOptions{
 		Tools:     cfg.NewTools,
+		Types:     cfg.Types,
 		Isolate:   cfg.Isolate,
 		Workspace: workspace.Git{},
 	})

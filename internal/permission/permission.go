@@ -9,10 +9,12 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 )
 
 // Gate decides whether a tool call may proceed.
 type Gate struct {
+	mu      sync.Mutex
 	in      *bufio.Reader
 	out     io.Writer
 	session map[string]bool
@@ -26,6 +28,8 @@ func New(in io.Reader, out io.Writer) *Gate {
 // PreApprove marks tools as approved up front (e.g. from settings) so they
 // never prompt.
 func (g *Gate) PreApprove(names ...string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	for _, n := range names {
 		g.session[n] = true
 	}
@@ -33,6 +37,8 @@ func (g *Gate) PreApprove(names ...string) {
 
 // Allow reports whether the named tool may run. detail describes the call.
 func (g *Gate) Allow(name, detail string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	if g.session[name] {
 		return true
 	}
