@@ -18,6 +18,7 @@ import (
 	"github.com/tacoda/sigma/internal/commands"
 	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/message"
+	"github.com/tacoda/sigma/internal/permission"
 	"github.com/tacoda/sigma/internal/tools"
 	"github.com/tacoda/sigma/internal/workspace"
 )
@@ -97,6 +98,7 @@ type Config struct {
 	Model    string
 	System   string
 	Store    SessionStore
+	Mode     permission.Mode
 	Resume   bool
 }
 
@@ -110,7 +112,7 @@ func Run(cfg Config) error {
 
 	base := agent.Config{
 		Client:     cfg.Client,
-		Permission: b,
+		Permission: permission.ForMode(cfg.Mode, b),
 		Hooks:      cfg.Hooks,
 		Model:      cfg.Model,
 		System:     cfg.System,

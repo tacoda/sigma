@@ -8,6 +8,7 @@
     "writable": []
   },
   "eventLog": ".sigma/events.jsonl",
+  "permissionMode": "acceptEdits",
   "hooks": {
     "PreToolUse": ["./scripts/guard.sh"]
   }

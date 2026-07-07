@@ -27,6 +27,8 @@ type Settings struct {
 	Sandbox Sandbox `json:"sandbox,omitempty"`
 	// EventLog, if set, is a path where the event stream is recorded as JSONL.
 	EventLog string `json:"eventLog,omitempty"`
+	// PermissionMode gates mutating tools: default, acceptEdits, plan, bypass.
+	PermissionMode string `json:"permissionMode,omitempty"`
 }
 
 // Sandbox configures command confinement.
@@ -74,6 +76,9 @@ func merge(s *Settings, path string) {
 	}
 	if f.EventLog != "" {
 		s.EventLog = f.EventLog
+	}
+	if f.PermissionMode != "" {
+		s.PermissionMode = f.PermissionMode
 	}
 	s.AllowedTools = append(s.AllowedTools, f.AllowedTools...)
 	for name, srv := range f.MCPServers {

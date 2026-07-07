@@ -160,6 +160,7 @@ type deps struct {
 	client   *anthropic.Client
 	newTools func(root string) []tools.Tool
 	isolate  bool
+	permMode permission.Mode
 	bus      hooks.Bus
 	model    string
 	system   string
@@ -268,6 +269,7 @@ func buildDeps() deps {
 		client:   loadClient(),
 		newTools: newTools,
 		isolate:  cfg.Isolate,
+		permMode: permission.ParseMode(cfg.PermissionMode),
 		bus:      bus,
 		model:    model,
 		system:   system,
@@ -288,15 +290,16 @@ func runAgent(args []string) {
 	}
 	d := buildDeps()
 	defer d.cleanup()
-	gate := permission.New(os.Stdin, os.Stderr)
+	mode := d.permMode
 	if autoYes {
-		gate = permission.NewAuto()
+		mode = permission.Bypass
 	}
+	gate := permission.New(os.Stdin, os.Stderr)
 	gate.PreApprove(d.allowed...)
 
 	base := agent.Config{
 		Client:     d.client,
-		Permission: gate,
+		Permission: permission.ForMode(mode, gate),
 		Hooks:      d.bus,
 		Model:      d.model,
 		System:     d.system,
@@ -334,6 +337,7 @@ func runChat(args []string) {
 		Model:    d.model,
 		System:   d.system,
 		Store:    session.Store{},
+		Mode:     d.permMode,
 		Resume:   resume,
 	}
 	if err := tui.Run(cfg); err != nil {

@@ -6,12 +6,6 @@ import (
 	"testing"
 )
 
-func TestAuto(t *testing.T) {
-	if !NewAuto().Allow("bash", "rm -rf") {
-		t.Error("auto gate should allow")
-	}
-}
-
 func TestAllowOnce(t *testing.T) {
 	g := New(strings.NewReader("y\n"), io.Discard)
 	if !g.Allow("bash", "ls") {

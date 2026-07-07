@@ -16,17 +16,11 @@ type Gate struct {
 	in      *bufio.Reader
 	out     io.Writer
 	session map[string]bool
-	autoYes bool
 }
 
 // New returns an interactive gate reading approvals from in, prompting on out.
 func New(in io.Reader, out io.Writer) *Gate {
 	return &Gate{in: bufio.NewReader(in), out: out, session: map[string]bool{}}
-}
-
-// NewAuto returns a gate that approves everything (non-interactive use).
-func NewAuto() *Gate {
-	return &Gate{session: map[string]bool{}, autoYes: true}
 }
 
 // PreApprove marks tools as approved up front (e.g. from settings) so they
@@ -39,7 +33,7 @@ func (g *Gate) PreApprove(names ...string) {
 
 // Allow reports whether the named tool may run. detail describes the call.
 func (g *Gate) Allow(name, detail string) bool {
-	if g.autoYes || g.session[name] {
+	if g.session[name] {
 		return true
 	}
 	fmt.Fprintf(g.out, "\n  ⚠ allow %s? %s\n  [y]es / [a]lways / [N]o: ", name, detail)
