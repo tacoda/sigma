@@ -20,6 +20,8 @@ import (
 	"github.com/tacoda/sigma/internal/mcp"
 	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/permission"
+	"github.com/tacoda/sigma/internal/plugin"
+	_ "github.com/tacoda/sigma/internal/plugins/telemetry" // register built-in plugin
 	"github.com/tacoda/sigma/internal/prompt"
 	"github.com/tacoda/sigma/internal/rules"
 	"github.com/tacoda/sigma/internal/session"
@@ -224,8 +226,15 @@ func buildDeps() deps {
 		model = cfg.Model
 	}
 
-	// extra tools are workspace-root-independent (skills, MCP); the file tools
-	// are rebuilt per root by newTools.
+	// Mount enabled plugin bundles; they contribute tools, sources, and hooks.
+	host, err := plugin.Mount(cfg.Plugins)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "mount plugins:", err)
+		os.Exit(1)
+	}
+
+	// extra tools are workspace-root-independent (skills, MCP, plugins); the file
+	// tools are rebuilt per root by newTools.
 	var extra []tools.Tool
 	sources := []prompt.Source{rules.Source{}}
 	if cfg.OutputStyle != "" {
@@ -239,6 +248,7 @@ func buildDeps() deps {
 		extra = append(extra, skills.NewTool(sk))
 		sources = append(sources, sk)
 	}
+	sources = append(sources, host.Sources...)
 	system, err := prompt.Assemble(sources...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "assemble system prompt:", err)
@@ -250,6 +260,9 @@ func buildDeps() deps {
 		fmt.Fprintln(os.Stderr, "load hooks:", err)
 		os.Exit(1)
 	}
+	if len(host.Hooks) > 0 {
+		bus = append(hooks.Multi{bus}, host.Hooks...)
+	}
 
 	cleanup := func() {}
 	if len(cfg.MCPServers) > 0 {
@@ -257,6 +270,7 @@ func buildDeps() deps {
 		extra = append(extra, mcpTools...)
 		cleanup = client.Close
 	}
+	extra = append(extra, host.Tools...)
 
 	// Event-log sensor: record the event stream as JSONL if configured.
 	if path := eventLogPath(cfg); path != "" {

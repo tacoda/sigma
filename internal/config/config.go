@@ -34,6 +34,8 @@ type Settings struct {
 	CompactAt int `json:"compactAt,omitempty"`
 	// OutputStyle names an output style whose prompt shapes the agent's voice.
 	OutputStyle string `json:"outputStyle,omitempty"`
+	// Plugins are the names of extra plugin bundles to mount.
+	Plugins []string `json:"plugins,omitempty"`
 }
 
 // Sandbox configures command confinement.
@@ -91,6 +93,7 @@ func merge(s *Settings, path string) {
 	if f.OutputStyle != "" {
 		s.OutputStyle = f.OutputStyle
 	}
+	s.Plugins = append(s.Plugins, f.Plugins...)
 	s.AllowedTools = append(s.AllowedTools, f.AllowedTools...)
 	for name, srv := range f.MCPServers {
 		if s.MCPServers == nil {
