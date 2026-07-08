@@ -10,7 +10,7 @@ import (
 )
 
 func TestMountDefaults(t *testing.T) {
-	h, err := plugin.Mount([]string{"codehealth"}, nil)
+	h, err := plugin.Mount([]string{"codehealth"}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

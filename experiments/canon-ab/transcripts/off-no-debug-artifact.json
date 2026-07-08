@@ -1,0 +1,1 @@
+[{"Content":[{"type":"tool_use","id":"1","name":"write_file","input":{"path":"hello.js","content":"console.log(\"hi\")"}}],"StopReason":"tool_use"},{"Content":[{"type":"text","text":"added logging"}],"StopReason":"end_turn"}]

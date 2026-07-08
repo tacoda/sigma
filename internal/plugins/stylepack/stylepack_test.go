@@ -11,7 +11,7 @@ func TestMountRegistersBuiltinStyles(t *testing.T) {
 	t.Chdir(t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 
-	if _, err := plugin.Mount([]string{"styles"}, nil); err != nil {
+	if _, err := plugin.Mount([]string{"styles"}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	set := styles.Load()

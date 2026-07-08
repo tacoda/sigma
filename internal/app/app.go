@@ -73,7 +73,7 @@ func Build(o Options) (*Deps, error) {
 		model = cfg.Model
 	}
 
-	host, err := plugin.Mount(cfg.Plugins, cfg.PluginConfig)
+	host, err := plugin.Mount(cfg.Plugins, cfg.DisablePlugins, cfg.PluginConfig)
 	if err != nil {
 		return nil, fmt.Errorf("mount plugins: %w", err)
 	}

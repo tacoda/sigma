@@ -10,12 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/tacoda/sigma/internal/agent"
-	"github.com/tacoda/sigma/internal/exec"
 	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/message"
-	"github.com/tacoda/sigma/internal/permission"
-	"github.com/tacoda/sigma/internal/tools"
 )
 
 // ReplayRunner runs the agent with a fake LLM that replays a recorded
@@ -31,23 +27,10 @@ func (rr ReplayRunner) Run(ctx context.Context, v Variant, c Case) (Result, erro
 	if err != nil {
 		return Result{}, fmt.Errorf("transcript %s: %w", path, err)
 	}
-	dir, err := scratch(c.Setup)
-	if err != nil {
-		return Result{}, err
-	}
-
-	rec := &traceRecorder{}
-	var out strings.Builder
-	a := agent.New(agent.Config{
-		Client:     &replayLLM{results: transcript},
-		Tools:      tools.NewRegistry(tools.FS(dir, exec.Local{Dir: dir})...),
-		Permission: permission.ForMode(permission.Bypass, nil),
-		UI:         &captureUI{b: &out},
-		Hooks:      rec,
-		Model:      "replay",
-	})
-	runErr := a.Run(ctx, c.Prompt)
-	return Result{Output: out.String(), Trace: rec.events, Dir: dir, Err: runErr}, nil
+	// Build the real agent from the variant's charter, then replay the model
+	// through it — so charter differences (hooks, guards, prompt) manifest
+	// deterministically on the same transcript.
+	return runAgent(ctx, &replayLLM{results: transcript}, v.Charter, c)
 }
 
 // replayLLM returns recorded results in order.

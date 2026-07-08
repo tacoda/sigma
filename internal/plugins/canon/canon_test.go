@@ -19,7 +19,7 @@ func emit(tool, input string) hooks.Outcome {
 }
 
 func TestMountsByDefault(t *testing.T) {
-	h, err := plugin.Mount(nil, nil) // canon is a default; init() registered it
+	h, err := plugin.Mount(nil, nil, nil) // canon is a default; init() registered it
 	if err != nil {
 		t.Fatal(err)
 	}

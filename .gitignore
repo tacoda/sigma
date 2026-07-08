@@ -2,3 +2,4 @@
 /bin/
 .sigma/
 *.test
+/experiments/**/report.html

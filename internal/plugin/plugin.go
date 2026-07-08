@@ -63,11 +63,16 @@ func Available() []string {
 
 // Mount registers the named plugins into a fresh Host. An unknown name is an
 // error so a typo fails loudly rather than silently disabling a layer.
-func Mount(enabled []string, cfgs map[string]Config) (*Host, error) {
+func Mount(enabled, disabled []string, cfgs map[string]Config) (*Host, error) {
+	off := make(map[string]bool, len(disabled))
+	for _, n := range disabled {
+		off[n] = true
+	}
 	h := &Host{}
 	seen := map[string]bool{}
 	for _, name := range append(append([]string{}, defaults...), enabled...) {
-		if seen[name] {
+		if seen[name] || off[name] {
+			seen[name] = true
 			continue
 		}
 		seen[name] = true

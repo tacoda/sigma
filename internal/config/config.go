@@ -36,6 +36,8 @@ type Settings struct {
 	OutputStyle string `json:"outputStyle,omitempty"`
 	// Plugins are the names of extra plugin bundles to mount.
 	Plugins []string `json:"plugins,omitempty"`
+	// DisablePlugins names plugins to skip, including default-enabled ones.
+	DisablePlugins []string `json:"disablePlugins,omitempty"`
 	// PluginConfig holds per-plugin raw JSON config, keyed by plugin name.
 	PluginConfig map[string]json.RawMessage `json:"pluginConfig,omitempty"`
 }
@@ -96,6 +98,7 @@ func merge(s *Settings, path string) {
 		s.OutputStyle = f.OutputStyle
 	}
 	s.Plugins = append(s.Plugins, f.Plugins...)
+	s.DisablePlugins = append(s.DisablePlugins, f.DisablePlugins...)
 	for k, v := range f.PluginConfig {
 		if s.PluginConfig == nil {
 			s.PluginConfig = map[string]json.RawMessage{}
