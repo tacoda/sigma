@@ -22,6 +22,7 @@ import (
 	"github.com/tacoda/sigma/internal/permission"
 	"github.com/tacoda/sigma/internal/plugin"
 	_ "github.com/tacoda/sigma/internal/plugins/codehealth" // register built-in plugin
+	_ "github.com/tacoda/sigma/internal/plugins/stylepack"  // register built-in plugin
 	_ "github.com/tacoda/sigma/internal/plugins/telemetry"  // register built-in plugin
 	"github.com/tacoda/sigma/internal/prompt"
 	"github.com/tacoda/sigma/internal/rules"

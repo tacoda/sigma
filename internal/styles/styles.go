@@ -37,9 +37,20 @@ func (s Style) Contribute() (string, error) { return s.Body, nil }
 // Set is the loaded styles, keyed by name.
 type Set map[string]Style
 
-// Load reads styles from the user then project directories.
+// registered holds built-in styles contributed in-process (e.g. by a plugin).
+var registered = map[string]Style{}
+
+// Register adds a built-in style, available to Load unless a file style of the
+// same name overrides it.
+func Register(s Style) { registered[s.Name] = s }
+
+// Load returns registered built-in styles overlaid with user then project file
+// styles (files win on name conflict).
 func Load() Set {
 	s := Set{}
+	for name, st := range registered {
+		s[name] = st
+	}
 	if home, err := os.UserHomeDir(); err == nil {
 		s.loadDir(filepath.Join(home, ".sigma", "styles"))
 	}

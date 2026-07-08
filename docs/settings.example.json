@@ -11,7 +11,7 @@
   "permissionMode": "acceptEdits",
   "compactAt": 120000,
   "outputStyle": "concise",
-  "plugins": ["telemetry", "codehealth"],
+  "plugins": ["telemetry", "codehealth", "styles"],
   "pluginConfig": {
     "codehealth": { "checks": ["go test ./...", "go vet ./..."] }
   },

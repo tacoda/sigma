@@ -6,6 +6,24 @@ import (
 	"testing"
 )
 
+func TestRegisteredStyleLoadsAndFileWins(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	Register(Style{Name: "built", Description: "builtin", Body: "BUILTIN_BODY"})
+
+	if got := Load()["built"]; got.Body != "BUILTIN_BODY" {
+		t.Errorf("registered style not loaded: %+v", got)
+	}
+
+	// A file style of the same name overrides the built-in.
+	dir := filepath.Join(".sigma", "styles")
+	_ = os.MkdirAll(dir, 0o755)
+	_ = os.WriteFile(filepath.Join(dir, "built.md"), []byte("FILE_BODY"), 0o644)
+	if got := Load()["built"]; got.Body != "FILE_BODY" {
+		t.Errorf("file style should override built-in, got %q", got.Body)
+	}
+}
+
 func TestLoadAndContribute(t *testing.T) {
 	t.Chdir(t.TempDir())
 	dir := filepath.Join(".sigma", "styles")
