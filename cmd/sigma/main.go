@@ -139,26 +139,65 @@ func runEval(args []string) {
 		os.Exit(1)
 	}
 	// Transcripts are resolved relative to the experiment file's directory.
-	runner := eval.ReplayRunner{Base: filepath.Dir(args[0])}
-	rep, err := exp.Run(context.Background(), runner, nil)
+	base := filepath.Dir(args[0])
+	scorers := []eval.Scorer{eval.Programmatic{}, eval.Trace{}}
+	if usesJudge(exp) {
+		if c, err := tryLoadClient(); err == nil {
+			scorers = append(scorers, eval.Judge{Client: c, Model: authModel})
+		} else {
+			fmt.Fprintln(os.Stderr, "eval: judge scorer skipped (no credentials):", err)
+		}
+	}
+
+	rep, err := exp.Run(context.Background(), eval.ReplayRunner{Base: base}, scorers)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "eval:", err)
 		os.Exit(1)
 	}
+
+	html, err := eval.ReporterFor(exp.Level).Render(rep)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "eval: render:", err)
+		os.Exit(1)
+	}
+	out := filepath.Join(base, "report.html")
+	if err := os.WriteFile(out, []byte(html), 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, "eval: write report:", err)
+		os.Exit(1)
+	}
 	fmt.Print(rep.String())
+	fmt.Println("\nreport:", out)
+}
+
+func usesJudge(exp *eval.Experiment) bool {
+	for _, c := range exp.Cases {
+		if c.Judge != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func loadClient() *anthropic.Client {
+	c, err := tryLoadClient()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	return c
+}
+
+// tryLoadClient loads credentials without exiting, for callers that can degrade
+// (e.g. the eval judge scorer).
+func tryLoadClient() (*anthropic.Client, error) {
 	creds, err := auth.Load()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "load credentials:", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("load credentials: %w", err)
 	}
 	if err := auth.EnsureValid(creds); err != nil {
-		fmt.Fprintln(os.Stderr, "credentials expired and refresh failed:", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("credentials expired and refresh failed: %w", err)
 	}
-	return anthropic.New(creds.AccessToken)
+	return anthropic.New(creds.AccessToken), nil
 }
 
 func runAuth(args []string) {

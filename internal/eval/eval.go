@@ -17,10 +17,20 @@ import (
 
 // Case is one task to run and how to score it.
 type Case struct {
-	Name   string   `yaml:"name"`
-	Prompt string   `yaml:"prompt"`
-	Setup  string   `yaml:"setup"`  // optional seed directory copied into the scratch workspace
-	Checks []string `yaml:"checks"` // programmatic checks (shell commands run in the workspace)
+	Name   string       `yaml:"name"`
+	Prompt string       `yaml:"prompt"`
+	Setup  string       `yaml:"setup"`  // optional seed directory copied into the scratch workspace
+	Checks []string     `yaml:"checks"` // programmatic checks (shell commands run in the workspace)
+	Trace  *TraceAssert `yaml:"trace"`  // assertions over the event trace
+	Judge  string       `yaml:"judge"`  // LLM-judge rubric
+}
+
+// TraceAssert is a set of assertions over a run's event stream.
+type TraceAssert struct {
+	Used     []string `yaml:"used"`     // tools that must appear
+	NotUsed  []string `yaml:"notUsed"`  // tools that must not appear
+	NoError  bool     `yaml:"noError"`  // no ToolError events
+	MaxTurns int      `yaml:"maxTurns"` // model responses must be <= this
 }
 
 // Variant is a configuration under test — a .sigma/ charter.
@@ -58,6 +68,7 @@ type Scorer interface {
 // Experiment compares variants over cases.
 type Experiment struct {
 	Name     string    `yaml:"name"`
+	Level    string    `yaml:"level"` // selects the Reporter (e.g. "charter", "workflow", "policy")
 	Variants []Variant `yaml:"variants"`
 	Cases    []Case    `yaml:"cases"`
 	Repeats  int       `yaml:"repeats"` // runs per (variant, case); <1 treated as 1
@@ -67,14 +78,14 @@ type Experiment struct {
 // defaults to a single Programmatic scorer.
 func (e Experiment) Run(ctx context.Context, runner Runner, scorers []Scorer) (*Report, error) {
 	if len(scorers) == 0 {
-		scorers = []Scorer{Programmatic{}}
+		scorers = []Scorer{Programmatic{}, Trace{}}
 	}
 	reps := e.Repeats
 	if reps < 1 {
 		reps = 1
 	}
 
-	rep := &Report{Experiment: e.Name}
+	rep := &Report{Experiment: e.Name, Level: e.Level}
 	for _, v := range e.Variants {
 		vr := VariantReport{Name: v.Name}
 		var sum float64
@@ -129,6 +140,7 @@ func caseScore(scores []Score) float64 {
 
 type Report struct {
 	Experiment string
+	Level      string
 	Variants   []VariantReport
 }
 
@@ -144,8 +156,42 @@ type CaseReport struct {
 	Scores []Score
 }
 
-// String renders the report. With exactly two variants it adds a per-case A/B
-// delta (variant[1] − variant[0]) and the overall delta.
+// Delta is one case's A→B score change.
+type Delta struct {
+	Case string
+	A, B float64
+	Diff float64
+}
+
+// Comparison is the A/B result: per-case deltas, overall delta, and a sign-test
+// significance verdict.
+type Comparison struct {
+	A, B               string
+	Deltas             []Delta
+	Overall            float64
+	Wins, Losses, Ties int
+	P                  float64 // two-sided sign-test p-value
+}
+
+// Compare returns the A/B comparison; ok is false unless there are exactly two
+// variants.
+func (r *Report) Compare() (Comparison, bool) {
+	if len(r.Variants) != 2 {
+		return Comparison{}, false
+	}
+	a, b := r.Variants[0], r.Variants[1]
+	cmp := Comparison{A: a.Name, B: b.Name, Overall: b.Mean - a.Mean}
+	diffs := make([]float64, len(a.Cases))
+	for i := range a.Cases {
+		d := b.Cases[i].Score - a.Cases[i].Score
+		cmp.Deltas = append(cmp.Deltas, Delta{Case: a.Cases[i].Name, A: a.Cases[i].Score, B: b.Cases[i].Score, Diff: d})
+		diffs[i] = d
+	}
+	cmp.Wins, cmp.Losses, cmp.Ties, cmp.P = signTest(diffs)
+	return cmp, true
+}
+
+// String renders a terse text summary.
 func (r *Report) String() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "experiment: %s\n", r.Experiment)
@@ -155,14 +201,14 @@ func (r *Report) String() string {
 			fmt.Fprintf(&b, "  %-24s %.2f\n", c.Name, c.Score)
 		}
 	}
-	if len(r.Variants) == 2 {
-		a, c := r.Variants[0], r.Variants[1]
-		fmt.Fprintf(&b, "\nA/B: %s vs %s\n", a.Name, c.Name)
-		for i := range a.Cases {
-			d := c.Cases[i].Score - a.Cases[i].Score
-			fmt.Fprintf(&b, "  %-24s %+.2f\n", a.Cases[i].Name, d)
+	if cmp, ok := r.Compare(); ok {
+		fmt.Fprintf(&b, "\nA/B: %s vs %s\n", cmp.A, cmp.B)
+		for _, d := range cmp.Deltas {
+			fmt.Fprintf(&b, "  %-24s %+.2f\n", d.Case, d.Diff)
 		}
-		fmt.Fprintf(&b, "  %-24s %+.2f  (overall)\n", "", c.Mean-a.Mean)
+		fmt.Fprintf(&b, "  %-24s %+.2f  (overall)\n", "", cmp.Overall)
+		fmt.Fprintf(&b, "significance: %d win / %d loss / %d tie, sign-test p=%.3f\n",
+			cmp.Wins, cmp.Losses, cmp.Ties, cmp.P)
 	}
 	return b.String()
 }

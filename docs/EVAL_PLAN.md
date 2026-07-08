@@ -103,8 +103,8 @@ Replay transcripts live at `experiments/<name>/transcripts/<variant>-<case>.json
 
 ## Phasing
 
-- **E0 — core + replay + programmatic + trigger.** Types (Case/Variant/Result/Score, Runner/Scorer ports), replay Runner (fake LLM replays a transcript fixture), programmatic Scorer, Experiment runner, A/B Report (means + per-case table), `sigma eval`. Deterministic, no creds, fully testable.
-- **E1 — scorers + stats.** trace Scorer, judge Scorer (LLM port); paired significance (sign/Wilcoxon) in the report.
+- **E0 — core + replay + programmatic + trigger.** ✅ Types (Case/Variant/Result/Score, Runner/Scorer ports), replay Runner (fake LLM replays a transcript fixture), programmatic Scorer, Experiment runner, A/B Report (means + per-case table), `sigma eval`. Deterministic, no creds, fully testable.
+- **E1 — scorers + stats + reporting.** ✅ trace Scorer; judge Scorer (LLM port, degrades when no creds); paired sign-test significance; **pluggable `Reporter` port + registry (level → reporter)** so each higher level renders its own report; default HTML reporter; `sigma eval` writes `report.html`.
 - **E2 — live + charter parameterization.** live Runner (real agent in a scratch dir); thread a config *root* through config/rules/skills/agents/styles/workflows/hooks so a Variant's charter is actually loaded; transcript recording on live runs (feeds replay).
 - **E3 — generic higher-layer reuse.** Generalize `Variant` beyond charters (a workflow variant; an opaque variant others supply); document embedding for open-refinery-style policy A/Bs.
 

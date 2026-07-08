@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/tacoda/sigma/internal/exec"
+	"github.com/tacoda/sigma/internal/hooks"
 )
 
 // Programmatic scores a case by running its Checks (shell commands) in the
@@ -23,6 +24,50 @@ func (Programmatic) Score(ctx context.Context, c Case, r Result) []Score {
 		out = append(out, s)
 	}
 	return out
+}
+
+// Trace scores a case's TraceAssert against the run's event stream.
+type Trace struct{}
+
+func (Trace) Score(_ context.Context, c Case, r Result) []Score {
+	if c.Trace == nil {
+		return nil
+	}
+	used := map[string]bool{}
+	turns, toolErrs := 0, 0
+	for _, ev := range r.Trace {
+		switch ev.Kind {
+		case hooks.PreTool:
+			used[ev.Tool] = true
+		case hooks.PostLLM:
+			turns++
+		case hooks.ToolError:
+			toolErrs++
+		}
+	}
+
+	var out []Score
+	for _, t := range c.Trace.Used {
+		out = append(out, boolScore("used: "+t, used[t]))
+	}
+	for _, t := range c.Trace.NotUsed {
+		out = append(out, boolScore("notUsed: "+t, !used[t]))
+	}
+	if c.Trace.NoError {
+		out = append(out, boolScore("noError", toolErrs == 0))
+	}
+	if c.Trace.MaxTurns > 0 {
+		out = append(out, boolScore("maxTurns", turns <= c.Trace.MaxTurns))
+	}
+	return out
+}
+
+func boolScore(name string, ok bool) Score {
+	s := Score{Name: name, Pass: ok}
+	if ok {
+		s.Value = 1
+	}
+	return s
 }
 
 func firstLine(s string) string {
