@@ -2,6 +2,25 @@
 
 **Goal:** Claude Code in *capability*, hexagonal (ports & adapters) in *philosophy*, extras shipped as *plugins*.
 
+---
+
+## Status — P0–P3 complete (2026-07)
+
+| Phase | Status | What shipped |
+|---|---|---|
+| **P0** Foundation | ✅ | Makefile; fake LLM; golden agent-loop test |
+| **P1** Ports & adapters | ✅ | `message` domain split from `anthropic`; ports: LLM, Executor, ContextSource (`prompt.Source`), SessionStore, PermissionPolicy, HookBus, Workspace, UI, Tool; core imports adapters only at the composition root |
+| **P2** Capability parity | ✅ | Expanded `hooks.Bus` (12 events; Go callbacks + declarative YAML + shell adapters); worktrees; tool rooting; subagent isolation; sandbox (`exec.Sandbox`); permission modes; `Block` honored at prompt/response/tool/stop; compaction; prompt caching; subagent types + parallel fanout; output styles; memory hierarchy + `@imports`; MCP resources/prompts |
+| **P3** Extras as plugins | ✅ | Plugin host + per-plugin config; `telemetry`, `codehealth` (Stop gate), `stylepack`; declarative workflow engine; `sigma init` scaffolding |
+
+**Design realized (sensors / guides / gates):** sensors = event bus + JSONL sink; guides = rules/skills/styles/agent-prompts via `prompt.Source`; gates = permission+modes, 4 hook block points, rooting, worktree isolation, sandbox, code-health Stop gate. Every layer is a typed adapter behind a narrow port or a hook subscriber; all default-safe; golden loop test green throughout.
+
+**Deferred:** TUI runtime `/style` + plan-mode exit flow; isolated-parallel fanout; conversation-prefix caching; workflow loops/conditionals.
+
+**Next project:** eval harness (see `docs/EVAL_PLAN.md`).
+
+---
+
 **Two load-bearing decisions (locked):**
 
 1. **Ports & adapters is the spine.** The agent core depends only on narrow, specific port interfaces. Every existing extension point (tools, hooks, rules, skills, commands, MCP, permission, session, LLM, UI) is migrated to sit *behind a port as an adapter*. There is **no** universal `Plugin` contract in the core — ports stay specific on purpose.
