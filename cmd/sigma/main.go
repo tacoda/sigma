@@ -26,6 +26,7 @@ import (
 	_ "github.com/tacoda/sigma/internal/plugins/telemetry"  // register built-in plugin
 	"github.com/tacoda/sigma/internal/prompt"
 	"github.com/tacoda/sigma/internal/rules"
+	"github.com/tacoda/sigma/internal/scaffold"
 	"github.com/tacoda/sigma/internal/session"
 	"github.com/tacoda/sigma/internal/skills"
 	"github.com/tacoda/sigma/internal/styles"
@@ -70,6 +71,8 @@ func main() {
 	switch os.Args[1] {
 	case "version":
 		fmt.Println("sigma", version)
+	case "init":
+		runInit()
 	case "auth":
 		runAuth(os.Args[2:])
 	case "run":
@@ -87,6 +90,7 @@ func usage() {
 
 commands:
   version            print version
+  init               scaffold a starter .sigma/ config and examples
   auth test          verify Claude Code credentials with a live API call
   auth status        show credential status without calling the API
   auth refresh       force an OAuth token refresh
@@ -94,6 +98,21 @@ commands:
                            (--yes auto-approves all tool calls)
   chat [--resume]          interactive multi-turn TUI session
                            (--resume continues the saved session)`)
+}
+
+func runInit() {
+	created, err := scaffold.Init(".")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "init:", err)
+		os.Exit(1)
+	}
+	if len(created) == 0 {
+		fmt.Println("nothing to do: .sigma/ already set up")
+		return
+	}
+	for _, p := range created {
+		fmt.Println("created", p)
+	}
 }
 
 func loadClient() *anthropic.Client {
