@@ -11,29 +11,19 @@ import (
 	"strings"
 
 	"github.com/tacoda/sigma/internal/agent"
-	"github.com/tacoda/sigma/internal/agents"
 	"github.com/tacoda/sigma/internal/anthropic"
+	"github.com/tacoda/sigma/internal/app"
 	"github.com/tacoda/sigma/internal/auth"
-	"github.com/tacoda/sigma/internal/config"
 	"github.com/tacoda/sigma/internal/eval"
-	"github.com/tacoda/sigma/internal/exec"
 	"github.com/tacoda/sigma/internal/hooks"
-	"github.com/tacoda/sigma/internal/mcp"
 	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/permission"
-	"github.com/tacoda/sigma/internal/plugin"
 	_ "github.com/tacoda/sigma/internal/plugins/codehealth" // register built-in plugin
 	_ "github.com/tacoda/sigma/internal/plugins/stylepack"  // register built-in plugin
 	_ "github.com/tacoda/sigma/internal/plugins/telemetry"  // register built-in plugin
-	"github.com/tacoda/sigma/internal/prompt"
-	"github.com/tacoda/sigma/internal/rules"
 	"github.com/tacoda/sigma/internal/scaffold"
 	"github.com/tacoda/sigma/internal/session"
-	"github.com/tacoda/sigma/internal/skills"
-	"github.com/tacoda/sigma/internal/styles"
-	"github.com/tacoda/sigma/internal/tools"
 	"github.com/tacoda/sigma/internal/tui"
-	"github.com/tacoda/sigma/internal/workflows"
 	"github.com/tacoda/sigma/internal/workspace"
 )
 
@@ -58,11 +48,8 @@ func (consoleUI) Usage(int, int) {}
 
 const version = "0.0.1"
 
-// authModel is cheap; used for the auth smoke test.
+// authModel is cheap; used for the auth smoke test and the eval judge.
 const authModel = "claude-haiku-4-5-20251001"
-
-// agentModel drives the coding agent.
-const agentModel = "claude-sonnet-4-6"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -129,10 +116,6 @@ func runEval(args []string) {
 		fmt.Fprintln(os.Stderr, "eval: experiment file required")
 		os.Exit(2)
 	}
-	if live {
-		fmt.Fprintln(os.Stderr, "eval: --live not yet supported (replay only)")
-		os.Exit(2)
-	}
 	exp, err := eval.Load(args[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "eval:", err)
@@ -140,6 +123,17 @@ func runEval(args []string) {
 	}
 	// Transcripts are resolved relative to the experiment file's directory.
 	base := filepath.Dir(args[0])
+
+	var runner eval.Runner = eval.ReplayRunner{Base: base}
+	if live {
+		client, err := tryLoadClient()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "eval --live:", err)
+			os.Exit(1)
+		}
+		runner = eval.LiveRunner{Client: client, RecordDir: base}
+	}
+
 	scorers := []eval.Scorer{eval.Programmatic{}, eval.Trace{}}
 	if usesJudge(exp) {
 		if c, err := tryLoadClient(); err == nil {
@@ -149,7 +143,7 @@ func runEval(args []string) {
 		}
 	}
 
-	rep, err := exp.Run(context.Background(), eval.ReplayRunner{Base: base}, scorers)
+	rep, err := exp.Run(context.Background(), runner, scorers)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "eval:", err)
 		os.Exit(1)
@@ -252,153 +246,15 @@ func authTest() {
 	fmt.Printf("tokens: in=%d out=%d\n", resp.Usage.InputTokens, resp.Usage.OutputTokens)
 }
 
-// deps are the shared building blocks for an agent session. newTools builds the
-// tool set for a workspace root (cwd by default; a worktree when isolating).
-type deps struct {
-	client    *anthropic.Client
-	newTools  func(root string) []tools.Tool
-	types     agents.Set
-	workflows workflows.Set
-	isolate   bool
-	permMode  permission.Mode
-	compactAt int
-	bus       hooks.Bus
-	model     string
-	system    string
-	allowed   []string
-	cleanup   func()
-}
-
-// hookDebug logs every event to stderr when SIGMA_HOOK_DEBUG is set.
-func hookDebug(_ context.Context, ev hooks.Event) hooks.Outcome {
-	fmt.Fprintf(os.Stderr, "[hook] %s %s\n", ev.Kind, ev.Tool)
-	return hooks.Outcome{}
-}
-
-// eventLogPath resolves the event-log path: env override wins over config.
-func eventLogPath(cfg config.Settings) string {
-	if p := os.Getenv("SIGMA_EVENT_LOG"); p != "" {
-		return p
-	}
-	return cfg.EventLog
-}
-
-// openEventLog opens the JSONL event log for appending, creating its directory.
-// Returns nil on failure (logging is best-effort).
-func openEventLog(path string) *os.File {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		fmt.Fprintln(os.Stderr, "event log:", err)
-		return nil
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+// build assembles the agent's collaborators from the local charter via the app
+// composition root, exiting on failure.
+func build() *app.Deps {
+	d, err := app.Build(app.Options{Client: loadClient()})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "event log:", err)
-		return nil
-	}
-	return f
-}
-
-// buildBus composes the hook buses: in-process callbacks, declarative YAML
-// rules, then legacy shell commands from settings.json.
-func buildBus(shellHooks map[string][]string) (hooks.Bus, error) {
-	rules, err := hooks.LoadRules(hooks.RulePaths()...)
-	if err != nil {
-		return nil, err
-	}
-	cb := hooks.NewCallbacks()
-	if os.Getenv("SIGMA_HOOK_DEBUG") != "" {
-		cb.OnAll(hookDebug)
-	}
-	return hooks.Multi{cb, rules, hooks.NewShell(shellHooks)}, nil
-}
-
-// buildDeps assembles config, client, tools, skills, MCP servers, hooks, and
-// the system prompt. The caller must invoke deps.cleanup when the session ends.
-func buildDeps() deps {
-	cfg := config.Load()
-	model := agentModel
-	if cfg.Model != "" {
-		model = cfg.Model
-	}
-
-	// Mount enabled plugin bundles; they contribute tools, sources, and hooks.
-	host, err := plugin.Mount(cfg.Plugins, cfg.PluginConfig)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "mount plugins:", err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
-	// extra tools are workspace-root-independent (skills, MCP, plugins); the file
-	// tools are rebuilt per root by newTools.
-	var extra []tools.Tool
-	sources := []prompt.Source{rules.Source{}}
-	if cfg.OutputStyle != "" {
-		if st, ok := styles.Load()[cfg.OutputStyle]; ok {
-			sources = append(sources, st)
-		} else {
-			fmt.Fprintf(os.Stderr, "output style %q not found; ignoring\n", cfg.OutputStyle)
-		}
-	}
-	if sk := skills.Load(); len(sk) > 0 {
-		extra = append(extra, skills.NewTool(sk))
-		sources = append(sources, sk)
-	}
-	sources = append(sources, host.Sources...)
-	system, err := prompt.Assemble(sources...)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "assemble system prompt:", err)
-		os.Exit(1)
-	}
-
-	bus, err := buildBus(cfg.Hooks)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "load hooks:", err)
-		os.Exit(1)
-	}
-	if len(host.Hooks) > 0 {
-		bus = append(hooks.Multi{bus}, host.Hooks...)
-	}
-
-	cleanup := func() {}
-	if len(cfg.MCPServers) > 0 {
-		client, mcpTools := mcp.Connect(context.Background(), cfg.MCPServers)
-		extra = append(extra, mcpTools...)
-		cleanup = client.Close
-	}
-	extra = append(extra, host.Tools...)
-
-	// Event-log sensor: record the event stream as JSONL if configured.
-	if path := eventLogPath(cfg); path != "" {
-		if f := openEventLog(path); f != nil {
-			bus = hooks.Multi{hooks.NewSink(f), bus}
-			prev := cleanup
-			cleanup = func() { f.Close(); prev() }
-		}
-	}
-
-	sb := cfg.Sandbox
-	newTools := func(root string) []tools.Tool {
-		var ex exec.Executor = exec.Local{Dir: root}
-		if sb.Enabled {
-			ex = exec.Sandbox{Dir: root, Policy: exec.Policy{AllowNetwork: sb.Network, Writable: sb.Writable}}
-		}
-		return append(tools.FS(root, ex), extra...)
-	}
-
-	return deps{
-		client:    loadClient(),
-		newTools:  newTools,
-		types:     agents.Load(),
-		workflows: workflows.Load(),
-		isolate:   cfg.Isolate,
-		permMode:  permission.ParseMode(cfg.PermissionMode),
-		compactAt: cfg.CompactAt,
-		bus:       bus,
-		model:     model,
-		system:    system,
-		allowed:   cfg.AllowedTools,
-		cleanup:   cleanup,
-	}
+	return d
 }
 
 func runAgent(args []string) {
@@ -411,28 +267,28 @@ func runAgent(args []string) {
 		fmt.Fprintln(os.Stderr, "run: prompt required")
 		os.Exit(2)
 	}
-	d := buildDeps()
-	defer d.cleanup()
-	mode := d.permMode
+	d := build()
+	defer d.Cleanup()
+	mode := d.PermMode
 	if autoYes {
 		mode = permission.Bypass
 	}
 	gate := permission.New(os.Stdin, os.Stderr)
-	gate.PreApprove(d.allowed...)
+	gate.PreApprove(d.Allowed...)
 
 	base := agent.Config{
-		Client:     d.client,
+		Client:     d.Client,
 		Permission: permission.ForMode(mode, gate),
-		Hooks:      d.bus,
-		Model:      d.model,
-		System:     d.system,
-		CompactAt:  d.compactAt,
+		Hooks:      d.Bus,
+		Model:      d.Model,
+		System:     d.System,
+		CompactAt:  d.CompactAt,
 	}
 	base.Tools = agent.WithSubagent(base, agent.SubagentOptions{
-		Tools:     d.newTools,
-		Types:     d.types,
-		Workflows: d.workflows,
-		Isolate:   d.isolate,
+		Tools:     d.NewTools,
+		Types:     d.Types,
+		Workflows: d.Workflows,
+		Isolate:   d.Isolate,
 		Workspace: workspace.Git{},
 	})
 	base.UI = consoleUI{}
@@ -440,9 +296,9 @@ func runAgent(args []string) {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	d.bus.Emit(ctx, hooks.Event{Kind: hooks.SessionStart})
+	d.Bus.Emit(ctx, hooks.Event{Kind: hooks.SessionStart})
 	err := a.Run(ctx, strings.Join(args, " "))
-	d.bus.Emit(ctx, hooks.Event{Kind: hooks.SessionEnd})
+	d.Bus.Emit(ctx, hooks.Event{Kind: hooks.SessionEnd})
 	fmt.Println()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "run failed:", err)
@@ -452,21 +308,21 @@ func runAgent(args []string) {
 
 func runChat(args []string) {
 	resume := len(args) > 0 && args[0] == "--resume"
-	d := buildDeps()
-	defer d.cleanup()
+	d := build()
+	defer d.Cleanup()
 	cfg := tui.Config{
-		Client:    d.client,
-		NewTools:  d.newTools,
-		Types:     d.types,
-		Workflows: d.workflows,
-		Isolate:   d.isolate,
-		Hooks:     d.bus,
-		Allowed:   d.allowed,
-		Model:     d.model,
-		System:    d.system,
+		Client:    d.Client,
+		NewTools:  d.NewTools,
+		Types:     d.Types,
+		Workflows: d.Workflows,
+		Isolate:   d.Isolate,
+		Hooks:     d.Bus,
+		Allowed:   d.Allowed,
+		Model:     d.Model,
+		System:    d.System,
 		Store:     session.Store{},
-		Mode:      d.permMode,
-		CompactAt: d.compactAt,
+		Mode:      d.PermMode,
+		CompactAt: d.CompactAt,
 		Resume:    resume,
 	}
 	if err := tui.Run(cfg); err != nil {
