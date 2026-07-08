@@ -11,6 +11,7 @@ import (
 
 	"github.com/tacoda/sigma/internal/agents"
 	"github.com/tacoda/sigma/internal/tools"
+	"github.com/tacoda/sigma/internal/workflows"
 	"github.com/tacoda/sigma/internal/workspace"
 )
 
@@ -23,6 +24,8 @@ type SubagentOptions struct {
 	Tools func(root string) []tools.Tool
 	// Types are named sub-agent configurations selectable by name.
 	Types agents.Set
+	// Workflows are named multi-step orchestrations exposed by the workflow tool.
+	Workflows workflows.Set
 	// Isolate runs each `task` in a fresh worktree, merged on success.
 	Isolate bool
 	// Workspace creates the worktrees when Isolate is set.
@@ -37,6 +40,9 @@ func WithSubagent(base Config, opt SubagentOptions) *tools.Registry {
 	tmpl.System = base.System + subagentNote
 	s := spawner{tmpl: tmpl, opt: opt}
 	all := append(append([]tools.Tool{}, opt.Tools("")...), taskTool{s}, fanoutTool{s})
+	if len(opt.Workflows) > 0 {
+		all = append(all, workflowTool{s})
+	}
 	return tools.NewRegistry(all...)
 }
 
@@ -244,6 +250,78 @@ func (t fanoutTool) Run(ctx context.Context, input json.RawMessage) (string, err
 		}
 	}
 	return t.s.runParallel(ctx, args.Tasks), nil
+}
+
+// runWorkflow executes a workflow's steps in order, chaining outputs. A step
+// with a parallel group fans its substeps out concurrently.
+func (s spawner) runWorkflow(ctx context.Context, wf workflows.Workflow, input string) (string, error) {
+	outputs := map[string]string{"input": input}
+	prev := input
+	for i, step := range wf.Steps {
+		var out string
+		if len(step.Parallel) > 0 {
+			specs := make([]taskSpec, len(step.Parallel))
+			for j, sub := range step.Parallel {
+				specs[j] = taskSpec{Prompt: expand(sub.Prompt, outputs, prev), Type: sub.Type}
+			}
+			out = s.runParallel(ctx, specs)
+		} else {
+			var err error
+			out, err = s.runChild(ctx, expand(step.Prompt, outputs, prev), step.Type, false)
+			if err != nil {
+				return "", fmt.Errorf("step %d (%s): %w", i+1, step.Name, err)
+			}
+		}
+		prev = out
+		if step.Name != "" {
+			outputs[step.Name] = out
+		}
+	}
+	return prev, nil
+}
+
+// expand substitutes {input}, {prev}, and {stepname} placeholders.
+func expand(tmpl string, outputs map[string]string, prev string) string {
+	pairs := []string{"{prev}", prev}
+	for name, out := range outputs {
+		pairs = append(pairs, "{"+name+"}", out)
+	}
+	return strings.NewReplacer(pairs...).Replace(tmpl)
+}
+
+// workflowTool runs a named declarative workflow.
+type workflowTool struct{ s spawner }
+
+func (workflowTool) Name() string   { return "workflow" }
+func (workflowTool) ReadOnly() bool { return false }
+func (t workflowTool) Description() string {
+	return "Run a named multi-step workflow (sequential and parallel sub-agent steps) with an input. Available workflows: " + strings.Join(t.s.opt.Workflows.Names(), ", ") + "."
+}
+
+func (workflowTool) Schema() json.RawMessage {
+	return json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"name": {"type": "string", "description": "The workflow to run"},
+			"input": {"type": "string", "description": "Input passed to the workflow as {input}"}
+		},
+		"required": ["name"]
+	}`)
+}
+
+func (t workflowTool) Run(ctx context.Context, input json.RawMessage) (string, error) {
+	var args struct {
+		Name  string `json:"name"`
+		Input string `json:"input"`
+	}
+	if err := json.Unmarshal(input, &args); err != nil {
+		return "", err
+	}
+	wf, ok := t.s.opt.Workflows[args.Name]
+	if !ok {
+		return "", fmt.Errorf("unknown workflow %q", args.Name)
+	}
+	return t.s.runWorkflow(ctx, wf, args.Input)
 }
 
 // captureUI collects a sub-agent's text output instead of displaying it.

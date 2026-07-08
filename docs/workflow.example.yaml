@@ -1,0 +1,25 @@
+# Declarative workflow — copy to .sigma/workflows/review-fix.yaml (project) or
+# ~/.sigma/workflows/review-fix.yaml (user). Run it from the agent:
+#
+#   workflow { "name": "review-fix", "input": "internal/auth" }
+#
+# Steps run in order; a `parallel` step fans its substeps out concurrently.
+# Each step is a fresh sub-agent (optionally a named `type`). Prompts may use
+# {input} (the workflow argument), {prev} (previous step's output), and
+# {stepname} (a named step's output).
+
+name: review-fix
+steps:
+  - name: review
+    type: reviewer                 # a .sigma/agents/reviewer.md type (read-only)
+    prompt: "Review {input} for correctness bugs. List findings with file:line."
+
+  - parallel:                      # explore concerns concurrently (read-only)
+      - { type: reviewer, prompt: "Assess {input} for security issues." }
+      - { type: reviewer, prompt: "Assess {input} for performance issues." }
+
+  - name: fix
+    prompt: |
+      Apply fixes for the correctness findings below, then run the tests.
+      Findings:
+      {review}

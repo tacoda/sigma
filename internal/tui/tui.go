@@ -21,6 +21,7 @@ import (
 	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/permission"
 	"github.com/tacoda/sigma/internal/tools"
+	"github.com/tacoda/sigma/internal/workflows"
 	"github.com/tacoda/sigma/internal/workspace"
 )
 
@@ -94,6 +95,7 @@ type Config struct {
 	Client    agent.LLM
 	NewTools  func(root string) []tools.Tool
 	Types     agents.Set
+	Workflows workflows.Set
 	Isolate   bool
 	Hooks     hooks.Bus
 	Allowed   []string
@@ -124,6 +126,7 @@ func Run(cfg Config) error {
 	base.Tools = agent.WithSubagent(base, agent.SubagentOptions{
 		Tools:     cfg.NewTools,
 		Types:     cfg.Types,
+		Workflows: cfg.Workflows,
 		Isolate:   cfg.Isolate,
 		Workspace: workspace.Git{},
 	})

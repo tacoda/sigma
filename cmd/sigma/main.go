@@ -30,6 +30,7 @@ import (
 	"github.com/tacoda/sigma/internal/styles"
 	"github.com/tacoda/sigma/internal/tools"
 	"github.com/tacoda/sigma/internal/tui"
+	"github.com/tacoda/sigma/internal/workflows"
 	"github.com/tacoda/sigma/internal/workspace"
 )
 
@@ -165,6 +166,7 @@ type deps struct {
 	client    *anthropic.Client
 	newTools  func(root string) []tools.Tool
 	types     agents.Set
+	workflows workflows.Set
 	isolate   bool
 	permMode  permission.Mode
 	compactAt int
@@ -295,6 +297,7 @@ func buildDeps() deps {
 		client:    loadClient(),
 		newTools:  newTools,
 		types:     agents.Load(),
+		workflows: workflows.Load(),
 		isolate:   cfg.Isolate,
 		permMode:  permission.ParseMode(cfg.PermissionMode),
 		compactAt: cfg.CompactAt,
@@ -336,6 +339,7 @@ func runAgent(args []string) {
 	base.Tools = agent.WithSubagent(base, agent.SubagentOptions{
 		Tools:     d.newTools,
 		Types:     d.types,
+		Workflows: d.workflows,
 		Isolate:   d.isolate,
 		Workspace: workspace.Git{},
 	})
@@ -362,6 +366,7 @@ func runChat(args []string) {
 		Client:    d.client,
 		NewTools:  d.newTools,
 		Types:     d.types,
+		Workflows: d.workflows,
 		Isolate:   d.isolate,
 		Hooks:     d.bus,
 		Allowed:   d.allowed,
