@@ -33,10 +33,40 @@ type TraceAssert struct {
 	MaxTurns int      `yaml:"maxTurns"` // model responses must be <= this
 }
 
-// Variant is a configuration under test — a .sigma/ charter.
+// Variant is a configuration under test. Charter names a .sigma/ bundle for the
+// built-in charter runners; Params carries arbitrary key/values for a custom
+// Runner supplied by a higher layer (e.g. a governance-policy A/B).
 type Variant struct {
-	Name    string `yaml:"name"`
-	Charter string `yaml:"charter"`
+	Name    string            `yaml:"name"`
+	Charter string            `yaml:"charter"`
+	Params  map[string]string `yaml:"params"`
+}
+
+// Param returns a variant parameter. The key "charter" falls back to the
+// Charter field.
+func (v Variant) Param(key string) string {
+	if val, ok := v.Params[key]; ok {
+		return val
+	}
+	if key == "charter" {
+		return v.Charter
+	}
+	return ""
+}
+
+// RunnerFunc adapts a function to the Runner port, so a higher layer can supply
+// a runner inline without a struct.
+type RunnerFunc func(ctx context.Context, v Variant, c Case) (Result, error)
+
+func (f RunnerFunc) Run(ctx context.Context, v Variant, c Case) (Result, error) {
+	return f(ctx, v, c)
+}
+
+// ScorerFunc adapts a function to the Scorer port.
+type ScorerFunc func(ctx context.Context, c Case, r Result) []Score
+
+func (f ScorerFunc) Score(ctx context.Context, c Case, r Result) []Score {
+	return f(ctx, c, r)
 }
 
 // Result is one run's outcome.

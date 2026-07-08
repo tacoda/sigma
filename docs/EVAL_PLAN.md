@@ -106,7 +106,7 @@ Replay transcripts live at `experiments/<name>/transcripts/<variant>-<case>.json
 - **E0 — core + replay + programmatic + trigger.** ✅ Types (Case/Variant/Result/Score, Runner/Scorer ports), replay Runner (fake LLM replays a transcript fixture), programmatic Scorer, Experiment runner, A/B Report (means + per-case table), `sigma eval`. Deterministic, no creds, fully testable.
 - **E1 — scorers + stats + reporting.** ✅ trace Scorer; judge Scorer (LLM port, degrades when no creds); paired sign-test significance; **pluggable `Reporter` port + registry (level → reporter)** so each higher level renders its own report; default HTML reporter; `sigma eval` writes `report.html`.
 - **E2 — live + charter parameterization.** ✅ Extracted the composition root into `internal/app.Build` (charter loaded via a config-root chdir), used by both `main` and eval. LiveRunner builds the real agent under a variant's charter in a scratch workspace and records the transcript (feeds replay). `sigma eval --live`. (Eval runs are non-isolated for determinism.)
-- **E3 — generic higher-layer reuse.** Generalize `Variant` beyond charters (a workflow variant; an opaque variant others supply); document embedding for open-refinery-style policy A/Bs.
+- **E3 — generic higher-layer reuse.** ✅ Generalized `Variant` with `Params` (beyond `Charter`); added `RunnerFunc`/`ScorerFunc` adapters so any layer supplies runner/scorers inline. Embedding demonstrated by a non-charter policy A/B test; see `docs/eval-embedding.md`.
 
 ## Risks / calls
 
