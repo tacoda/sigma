@@ -39,9 +39,17 @@ type Plugin interface {
 }
 
 var registry = map[string]Plugin{}
+var defaults []string
 
 // Register adds a built-in plugin. Call from an init() function.
 func Register(p Plugin) { registry[p.Name()] = p }
+
+// RegisterDefault adds a plugin that mounts by default (without being listed in
+// config). Call from an init() function.
+func RegisterDefault(p Plugin) {
+	Register(p)
+	defaults = append(defaults, p.Name())
+}
 
 // Available lists the registered plugin names, sorted.
 func Available() []string {
@@ -57,7 +65,12 @@ func Available() []string {
 // error so a typo fails loudly rather than silently disabling a layer.
 func Mount(enabled []string, cfgs map[string]Config) (*Host, error) {
 	h := &Host{}
-	for _, name := range enabled {
+	seen := map[string]bool{}
+	for _, name := range append(append([]string{}, defaults...), enabled...) {
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
 		p, ok := registry[name]
 		if !ok {
 			return nil, fmt.Errorf("unknown plugin %q (available: %v)", name, Available())

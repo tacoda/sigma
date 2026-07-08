@@ -58,6 +58,8 @@ Hooks can be **declarative YAML**, **shell commands**, or **in-process Go callba
 
 ## Extras (plugins)
 
+**canon** is enabled by default: it contributes the engineering & platform canon (design, testing, safety, security, commits, agentic discipline) to the system prompt as a guide, and installs deterministic guards that block canon violations at the tool boundary — sensitive-file access, secrets or debug artifacts in written content, dangerous shell (`rm -rf`, force-push, `reset --hard`, `--no-verify`, piping downloads to a shell), and AI attribution in commits.
+
 Optional bundles enabled in `settings.json` (`"plugins": ["telemetry", "codehealth", "styles"]`):
 
 - **telemetry** — event-count sensor + a `telemetry_stats` tool.

@@ -18,6 +18,7 @@ import (
 	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/permission"
+	_ "github.com/tacoda/sigma/internal/plugins/canon"      // register default plugin
 	_ "github.com/tacoda/sigma/internal/plugins/codehealth" // register built-in plugin
 	_ "github.com/tacoda/sigma/internal/plugins/stylepack"  // register built-in plugin
 	_ "github.com/tacoda/sigma/internal/plugins/telemetry"  // register built-in plugin
