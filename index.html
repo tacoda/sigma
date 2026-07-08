@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sigma — a coding agent</title>
-<meta name="description" content="Sigma is a coding-agent CLI in Go. A minimal but complete agent harness with the Claude-standard feature set.">
+<meta name="description" content="Sigma is a reliable coding-agent CLI in Go: Claude Code in capability, hexagonal in philosophy, extras shipped as plugins — with a built-in A/B eval harness.">
 <style>
   :root {
     /* grays, from the TUI palette */
@@ -62,34 +62,86 @@
     <div class="tagline">· coding agent</div>
   </header>
 
-  <p class="lede">A coding-agent CLI in Go. It reuses your Claude Code subscription
-  credentials, so no API key is needed.</p>
+  <p class="lede">A reliable coding-agent CLI in Go: Claude Code in capability,
+  hexagonal in philosophy, extras shipped as plugins — with a built-in A/B
+  <b>eval harness</b> for testing changes with real data.</p>
 
-  <p>Sigma is a minimal but complete agent harness with the Claude-standard
-  feature set — tools, a permission gate, rules, slash commands, skills, MCP
-  servers, hooks, sub-agents, and resumable sessions.</p>
+  <p>Sigma's premise: an agent becomes reliable when its output is
+  <i>constrained</i> by layers you compose — <b>sensors</b> (observe),
+  <b>guides</b> (steer), and <b>gates</b> (permit / deny / validate). Every
+  layer is a small typed adapter behind a narrow port. It reuses your Claude
+  Code subscription credentials (OAuth) — no API key needed.</p>
 
   <h2>Install</h2>
-  <pre>go build -o sigma ./cmd/sigma</pre>
-  <p>Requires Go 1.25+ and an authenticated Claude Code install.</p>
+  <pre>git clone https://github.com/tacoda/sigma
+cd sigma
+make build          # -> bin/sigma</pre>
+  <p>Requires Go 1.25+ and Claude Code already authenticated on this machine.</p>
 
-  <h2>Use</h2>
-  <pre>sigma run "Summarize the TODOs in this repo."
-sigma chat            # interactive TUI; /help lists commands</pre>
+  <h2>Quickstart</h2>
+  <pre>sigma auth status      # verify Claude Code credentials
+sigma init             # scaffold a starter .sigma/ charter
+sigma run "fix the failing test in internal/foo"   # one-shot
+sigma chat             # interactive TUI (--resume to continue)</pre>
+  <p><code>run</code> gates every mutating tool call for approval
+  (<code>--yes</code> auto-approves); read-only tools run without prompting.</p>
 
-  <h2>What's inside</h2>
+  <h2>The charter — your <code>.sigma/</code></h2>
+  <p>A <b>charter</b> is the config bundle the agent loads from <code>.sigma/</code>
+  (and <code>~/.sigma/</code> for user-global). It shapes behavior without
+  touching code:</p>
   <ul class="features">
-    <li><b>Tools</b> — read, write, edit, bash, glob, grep</li>
-    <li><b>Permission gate</b> — read-only tools auto-run; mutating tools prompt</li>
-    <li><b>Rules</b> — CLAUDE.md injected into the system prompt</li>
-    <li><b>Slash commands & skills</b> — templated commands, progressive-disclosure skills</li>
-    <li><b>MCP</b> — stdio + streamable-http servers</li>
-    <li><b>Hooks</b> — PreToolUse / PostToolUse shell commands</li>
-    <li><b>Sub-agents</b> — delegate a subtask to a fresh agent</li>
-    <li><b>Sessions</b> — autosaved and resumable</li>
+    <li><b>settings.json</b> — model, permission mode, sandbox, plugins, compaction, event log</li>
+    <li><b>CLAUDE.md</b> — instructions (root-down hierarchy; <code>@path</code> imports)</li>
+    <li><b>skills/</b> — on-demand skills (progressive disclosure)</li>
+    <li><b>agents/</b> — named sub-agent types (own prompt + tool subset)</li>
+    <li><b>styles/</b> — output styles (voice / behavior)</li>
+    <li><b>workflows/</b> — declarative multi-step / parallel orchestrations</li>
+    <li><b>commands/</b> — slash commands (<code>$ARGUMENTS</code> expansion)</li>
+    <li><b>hooks.yaml</b> — declarative lifecycle hooks (match + run / deny / log / notify)</li>
   </ul>
 
-  <p style="color:var(--faint);margin-top:2rem">More docs land as features ship.</p>
+  <h2>Layers: sensors, guides, gates</h2>
+  <ul class="features">
+    <li><b>Sensors</b> — a typed event bus (<code>SessionStart</code>, <code>PreToolUse</code>, <code>PostLLMResponse</code>, <code>Stop</code>, …) with a JSONL audit sink</li>
+    <li><b>Guides</b> — the system prompt assembled from rules, skills, output styles, and agent-type prompts</li>
+    <li><b>Gates</b> — permission modes (<code>default</code> / <code>acceptEdits</code> / <code>plan</code> / <code>bypass</code>), hook blocks, path rooting, git-worktree isolation, an OS sandbox (seatbelt / bwrap), and a code-health Stop gate that won't let a turn finish until tests/lint pass</li>
+  </ul>
+  <p>Hooks can be <b>declarative YAML</b>, <b>shell commands</b>, or <b>in-process
+  Go callbacks</b> — all on one bus. A <code>Stop</code> hook that exits non-zero
+  makes the agent keep working until it's fixed.</p>
+
+  <h2>Extras (plugins)</h2>
+  <p><b>canon</b> is enabled by default: it contributes the engineering &
+  platform canon to the system prompt as a guide, and installs deterministic
+  guards that block canon violations at the tool boundary — sensitive-file
+  access, secrets or debug artifacts in written content, dangerous shell
+  (<code>rm -rf</code>, force-push, <code>reset --hard</code>,
+  <code>--no-verify</code>, piping downloads to a shell), and AI attribution in
+  commits.</p>
+  <p>Optional bundles enabled in <code>settings.json</code>:</p>
+  <ul class="features">
+    <li><b>telemetry</b> — event-count sensor + a <code>telemetry_stats</code> tool</li>
+    <li><b>codehealth</b> — a Stop gate running your checks (tests / vet / lint or a CodeScene call) + a <code>code_health</code> tool</li>
+    <li><b>styles</b> — built-in output styles (concise, explanatory, caveman)</li>
+  </ul>
+  <p>Plugins compose <i>over</i> the ports; they never touch the agent core.</p>
+
+  <h2>Eval harness</h2>
+  <p>A general A/B experimentation primitive: compare two <b>variants</b> (two
+  charters, before/after) over a case suite, scored with programmatic checks,
+  event-trace assertions, and an LLM judge, into a statistically-grounded HTML
+  report.</p>
+  <pre>sigma eval experiments/tighten-review/experiment.yaml         # replay (fake, free, deterministic)
+sigma eval --live experiments/tighten-review/experiment.yaml  # real agent; records transcripts</pre>
+  <p>Runs are <b>fake-by-default</b> (replay a recorded transcript);
+  <code>--live</code> runs the real agent and records transcripts for future
+  replay. The engine is generic — higher layers embed it with their own
+  runner and scorers.</p>
+
+  <p style="color:var(--faint);margin-top:2rem">Ports &amp; adapters throughout:
+  the agent core depends only on narrow interfaces, wired at a single
+  composition root. Status: early and evolving.</p>
 
   <footer>
     <a href="https://github.com/tacoda/sigma">github.com/tacoda/sigma</a>
