@@ -15,6 +15,7 @@ import (
 	"github.com/tacoda/sigma/internal/anthropic"
 	"github.com/tacoda/sigma/internal/auth"
 	"github.com/tacoda/sigma/internal/config"
+	"github.com/tacoda/sigma/internal/eval"
 	"github.com/tacoda/sigma/internal/exec"
 	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/mcp"
@@ -79,6 +80,8 @@ func main() {
 		runAgent(os.Args[2:])
 	case "chat":
 		runChat(os.Args[2:])
+	case "eval":
+		runEval(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -97,7 +100,8 @@ commands:
   run [--yes] <prompt...>  run the coding agent on a one-shot prompt
                            (--yes auto-approves all tool calls)
   chat [--resume]          interactive multi-turn TUI session
-                           (--resume continues the saved session)`)
+                           (--resume continues the saved session)
+  eval <experiment.yaml>   run an A/B eval experiment (replay by default)`)
 }
 
 func runInit() {
@@ -113,6 +117,35 @@ func runInit() {
 	for _, p := range created {
 		fmt.Println("created", p)
 	}
+}
+
+func runEval(args []string) {
+	live := false
+	if len(args) > 0 && args[0] == "--live" {
+		live = true
+		args = args[1:]
+	}
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "eval: experiment file required")
+		os.Exit(2)
+	}
+	if live {
+		fmt.Fprintln(os.Stderr, "eval: --live not yet supported (replay only)")
+		os.Exit(2)
+	}
+	exp, err := eval.Load(args[0])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "eval:", err)
+		os.Exit(1)
+	}
+	// Transcripts are resolved relative to the experiment file's directory.
+	runner := eval.ReplayRunner{Base: filepath.Dir(args[0])}
+	rep, err := exp.Run(context.Background(), runner, nil)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "eval:", err)
+		os.Exit(1)
+	}
+	fmt.Print(rep.String())
 }
 
 func loadClient() *anthropic.Client {

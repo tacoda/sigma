@@ -1,0 +1,22 @@
+# A/B eval experiment. Run with:  sigma eval experiments/tighten-review/experiment.yaml
+#
+# Fake-by-default: each (variant, case) replays a recorded transcript from
+# <experiment-dir>/transcripts/<variant>-<case>.json (a JSON array of message
+# results). Record them from a prior `--live` run (E2, not yet implemented).
+#
+# The agent runs in a fresh scratch workspace (seeded from `setup` if given);
+# `checks` are shell commands run there — exit 0 passes. The report compares the
+# two variants per case and overall.
+
+name: tighten-review-charter
+variants:
+  - { name: before, charter: .sigma }              # charter = a .sigma/ config bundle
+  - { name: after, charter: experiments/charter-v2 }
+cases:
+  - name: fix-failing-test
+    prompt: "Fix the failing test in internal/foo."
+    setup: experiments/seeds/foo-broken            # optional: copied into the workspace
+    checks:
+      - "go test ./internal/foo/"
+      - "test ! -e forbidden.txt"
+repeats: 1                                          # >1 only meaningful with --live
