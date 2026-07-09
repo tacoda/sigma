@@ -111,6 +111,33 @@ sigma chat             # interactive TUI (--resume to continue)</pre>
   Go callbacks</b> — all on one bus. A <code>Stop</code> hook that exits non-zero
   makes the agent keep working until it's fixed.</p>
 
+  <h2>Layers: a design methodology</h2>
+  <p>Sigma leans into <b>layers</b> as its architecture — a dedicated middleware
+  stack for an agent (Rack / Express / gRPC interceptors, but for a coding
+  agent). The loop is a thin core; every cross-cutting concern is a typed layer
+  wrapping one of three spines. A layer receives <code>next</code> and can
+  <i>observe</i>, <i>transform</i>, <i>short-circuit</i>, or <i>wrap</i> — so a
+  guard blocks, a cache returns early, redaction rewrites, a budget refuses.</p>
+  <ul class="features">
+    <li><b>Turn spine</b> — wraps a whole turn: <code>compaction → prompt-gate → loop</code></li>
+    <li><b>Model spine</b> — wraps every model call: <code>budget → retry → llm</code></li>
+    <li><b>Tool spine</b> — wraps every tool call: <code>… → ui → hooks → permission → exec</code></li>
+  </ul>
+  <p>Plugins and charters contribute layers; <b>ordering is the lever</b> (canon
+  guards before the sandbox, budget outermost). The stack is introspectable —
+  agent behavior reads as a pipeline:</p>
+  <pre>$ sigma layers
+turn spine (outer → inner):
+  compaction → prompt-gate → loop
+model spine (outer → inner):
+  budget → retry → llm
+tool spine (outer → inner):
+  dry-run → ui → hooks → permission → exec</pre>
+  <p>Because the stack is composed per charter, you can A/B a whole stack with
+  the eval harness — measure, with statistical data, what a layer change does
+  before and after. Sensors / guides / gates are <i>what</i> a layer does; the
+  spines are <i>where</i> it plugs in.</p>
+
   <h2>Extras (plugins)</h2>
   <p><b>canon</b> is enabled by default: it contributes the engineering &
   platform canon to the system prompt as a guide, and installs deterministic
