@@ -76,7 +76,7 @@ Context / prompt assembly folds into a model-path layer (it transforms the `Requ
 ## Phasing
 
 - **L0 — Tool spine.** ✅ Extracted `invoker` + `toolLayer` (internal/agent/toolstack.go): `runTools` now dispatches through a composed stack `ui → hooks → permission → exec` (UI split into call/result and hooks into pre/post so block/deny semantics are exact). `sigma layers` prints the spine. Canon guards/rooting/sandbox already ride the hooks/tool/exec seams. Behavior-preserving; golden green.
-- **L1 — Model spine.** `LLMLayer`; re-express prompt-cache, compaction, response-gate, and eval record/replay as layers; add token-budget and retry. `app.Build`/eval build the model stack.
+- **L1 — Model spine.** ✅ `LLMLayer` (internal/agent/modelstack.go): the client for every model call (turn loop + compaction) is wrapped `budget → retry → llm`, composed in `agent.New`. Config `tokenBudget` / `llmRetries` (default off → behavior-preserving); `sigma layers` shows the spine. Note: PreLLM/PostLLM emits + the response gate stay in the turn loop (the gate acts on the PostLLM outcome, which the LLM interface can't carry), and prompt caching stays in the anthropic adapter — those are turn-spine / adapter concerns, not model layers.
 - **L2 — Turn spine.** `TurnLayer`; session, worktree, stop-gate, compaction-trigger as turn layers.
 - **L3 — Layers as first-class extension.** `plugin.Host.Add*Layer`; charter-declared order + config; a couple of net-new layers (dry-run, budget) to prove the seam; A/B a stack via eval.
 

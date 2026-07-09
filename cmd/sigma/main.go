@@ -14,6 +14,7 @@ import (
 	"github.com/tacoda/sigma/internal/anthropic"
 	"github.com/tacoda/sigma/internal/app"
 	"github.com/tacoda/sigma/internal/auth"
+	"github.com/tacoda/sigma/internal/config"
 	"github.com/tacoda/sigma/internal/eval"
 	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/message"
@@ -111,11 +112,15 @@ func runInit() {
 }
 
 func runLayers() {
-	fmt.Println("tool spine (outer → inner):")
+	cfg := config.Load()
+	model := agent.ModelStack(agent.Config{TokenBudget: cfg.TokenBudget, LLMRetries: cfg.LLMRetries})
+	fmt.Println("model spine (outer → inner):")
+	fmt.Println("  " + strings.Join(model, " → "))
+	fmt.Println("\ntool spine (outer → inner):")
 	fmt.Println("  " + strings.Join(agent.ToolStack(), " → "))
 	fmt.Println("\nthe hooks layer fans out to the charter's guards, rules, and sinks")
 	fmt.Println("(canon plugin, .sigma/hooks.yaml, settings.json hooks, event log).")
-	fmt.Println("model and turn spines are not yet layered (see docs/LAYERS.md).")
+	fmt.Println("the turn spine is not yet layered (see docs/LAYERS.md).")
 }
 
 func runEval(args []string) {
@@ -289,12 +294,14 @@ func runAgent(args []string) {
 	gate.PreApprove(d.Allowed...)
 
 	base := agent.Config{
-		Client:     d.Client,
-		Permission: permission.ForMode(mode, gate),
-		Hooks:      d.Bus,
-		Model:      d.Model,
-		System:     d.System,
-		CompactAt:  d.CompactAt,
+		Client:      d.Client,
+		Permission:  permission.ForMode(mode, gate),
+		Hooks:       d.Bus,
+		Model:       d.Model,
+		System:      d.System,
+		CompactAt:   d.CompactAt,
+		TokenBudget: d.TokenBudget,
+		LLMRetries:  d.LLMRetries,
 	}
 	base.Tools = agent.WithSubagent(base, agent.SubagentOptions{
 		Tools:     d.NewTools,
@@ -323,19 +330,21 @@ func runChat(args []string) {
 	d := build()
 	defer d.Cleanup()
 	cfg := tui.Config{
-		Client:    d.Client,
-		NewTools:  d.NewTools,
-		Types:     d.Types,
-		Workflows: d.Workflows,
-		Isolate:   d.Isolate,
-		Hooks:     d.Bus,
-		Allowed:   d.Allowed,
-		Model:     d.Model,
-		System:    d.System,
-		Store:     session.Store{},
-		Mode:      d.PermMode,
-		CompactAt: d.CompactAt,
-		Resume:    resume,
+		Client:      d.Client,
+		NewTools:    d.NewTools,
+		Types:       d.Types,
+		Workflows:   d.Workflows,
+		Isolate:     d.Isolate,
+		Hooks:       d.Bus,
+		Allowed:     d.Allowed,
+		Model:       d.Model,
+		System:      d.System,
+		Store:       session.Store{},
+		Mode:        d.PermMode,
+		CompactAt:   d.CompactAt,
+		TokenBudget: d.TokenBudget,
+		LLMRetries:  d.LLMRetries,
+		Resume:      resume,
 	}
 	if err := tui.Run(cfg); err != nil {
 		fmt.Fprintln(os.Stderr, "chat failed:", err)

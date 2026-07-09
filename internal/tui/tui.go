@@ -92,19 +92,21 @@ func (b *bridge) Allow(name, detail string) bool {
 
 // Config holds everything needed to start a chat session.
 type Config struct {
-	Client    agent.LLM
-	NewTools  func(root string) []tools.Tool
-	Types     agents.Set
-	Workflows workflows.Set
-	Isolate   bool
-	Hooks     hooks.Bus
-	Allowed   []string
-	Model     string
-	System    string
-	Store     SessionStore
-	Mode      permission.Mode
-	CompactAt int
-	Resume    bool
+	Client      agent.LLM
+	NewTools    func(root string) []tools.Tool
+	Types       agents.Set
+	Workflows   workflows.Set
+	Isolate     bool
+	Hooks       hooks.Bus
+	Allowed     []string
+	Model       string
+	System      string
+	Store       SessionStore
+	Mode        permission.Mode
+	CompactAt   int
+	TokenBudget int
+	LLMRetries  int
+	Resume      bool
 }
 
 // Run starts the interactive chat session and blocks until the user quits.
@@ -116,12 +118,14 @@ func Run(cfg Config) error {
 	b.preApprove(cfg.Allowed)
 
 	base := agent.Config{
-		Client:     cfg.Client,
-		Permission: permission.ForMode(cfg.Mode, b),
-		Hooks:      cfg.Hooks,
-		Model:      cfg.Model,
-		System:     cfg.System,
-		CompactAt:  cfg.CompactAt,
+		Client:      cfg.Client,
+		Permission:  permission.ForMode(cfg.Mode, b),
+		Hooks:       cfg.Hooks,
+		Model:       cfg.Model,
+		System:      cfg.System,
+		CompactAt:   cfg.CompactAt,
+		TokenBudget: cfg.TokenBudget,
+		LLMRetries:  cfg.LLMRetries,
 	}
 	base.Tools = agent.WithSubagent(base, agent.SubagentOptions{
 		Tools:     cfg.NewTools,

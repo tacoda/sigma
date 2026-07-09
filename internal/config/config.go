@@ -32,6 +32,10 @@ type Settings struct {
 	// CompactAt summarizes history once a request's input tokens reach this
 	// count. 0 disables compaction.
 	CompactAt int `json:"compactAt,omitempty"`
+	// TokenBudget caps cumulative session tokens (model spine). 0 disables.
+	TokenBudget int `json:"tokenBudget,omitempty"`
+	// LLMRetries retries a failed model call this many times. 0 disables.
+	LLMRetries int `json:"llmRetries,omitempty"`
 	// OutputStyle names an output style whose prompt shapes the agent's voice.
 	OutputStyle string `json:"outputStyle,omitempty"`
 	// Plugins are the names of extra plugin bundles to mount.
@@ -93,6 +97,12 @@ func merge(s *Settings, path string) {
 	}
 	if f.CompactAt != 0 {
 		s.CompactAt = f.CompactAt
+	}
+	if f.TokenBudget != 0 {
+		s.TokenBudget = f.TokenBudget
+	}
+	if f.LLMRetries != 0 {
+		s.LLMRetries = f.LLMRetries
 	}
 	if f.OutputStyle != "" {
 		s.OutputStyle = f.OutputStyle

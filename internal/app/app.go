@@ -38,18 +38,20 @@ type Options struct {
 // Deps are the assembled building blocks. The caller supplies UI and permission
 // and constructs the agent (console, TUI, and eval differ only there).
 type Deps struct {
-	Client    agent.LLM
-	NewTools  func(root string) []tools.Tool
-	Types     agents.Set
-	Workflows workflows.Set
-	Isolate   bool
-	PermMode  permission.Mode
-	CompactAt int
-	Bus       hooks.Bus
-	Model     string
-	System    string
-	Allowed   []string
-	Cleanup   func()
+	Client      agent.LLM
+	NewTools    func(root string) []tools.Tool
+	Types       agents.Set
+	Workflows   workflows.Set
+	Isolate     bool
+	PermMode    permission.Mode
+	CompactAt   int
+	Bus         hooks.Bus
+	Model       string
+	System      string
+	Allowed     []string
+	TokenBudget int
+	LLMRetries  int
+	Cleanup     func()
 }
 
 // Build assembles Deps from the charter at ConfigRoot. It loads config while
@@ -131,18 +133,20 @@ func Build(o Options) (*Deps, error) {
 	}
 
 	return &Deps{
-		Client:    o.Client,
-		NewTools:  newTools,
-		Types:     agents.Load(),
-		Workflows: workflows.Load(),
-		Isolate:   cfg.Isolate,
-		PermMode:  permission.ParseMode(cfg.PermissionMode),
-		CompactAt: cfg.CompactAt,
-		Bus:       bus,
-		Model:     model,
-		System:    system,
-		Allowed:   cfg.AllowedTools,
-		Cleanup:   cleanup,
+		Client:      o.Client,
+		NewTools:    newTools,
+		Types:       agents.Load(),
+		Workflows:   workflows.Load(),
+		Isolate:     cfg.Isolate,
+		PermMode:    permission.ParseMode(cfg.PermissionMode),
+		CompactAt:   cfg.CompactAt,
+		Bus:         bus,
+		Model:       model,
+		System:      system,
+		Allowed:     cfg.AllowedTools,
+		TokenBudget: cfg.TokenBudget,
+		LLMRetries:  cfg.LLMRetries,
+		Cleanup:     cleanup,
 	}, nil
 }
 

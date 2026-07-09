@@ -10,6 +10,8 @@
   "eventLog": ".sigma/events.jsonl",
   "permissionMode": "acceptEdits",
   "compactAt": 120000,
+  "tokenBudget": 0,
+  "llmRetries": 0,
   "outputStyle": "concise",
   "plugins": ["telemetry", "codehealth", "styles"],
   "pluginConfig": {

@@ -73,6 +73,10 @@ type Config struct {
 	// CompactAt summarizes the history once a request's input tokens reach this
 	// count. 0 disables compaction.
 	CompactAt int
+	// TokenBudget caps cumulative tokens for the session (model spine). 0 = off.
+	TokenBudget int
+	// LLMRetries retries a failed model call this many times (model spine). 0 = off.
+	LLMRetries int
 }
 
 // Agent holds conversation state across turns.
@@ -81,6 +85,7 @@ type Agent struct {
 	messages  []message.Message
 	lastInput int // input tokens of the most recent request
 	invoker   invoker
+	llm       LLM
 }
 
 // New creates an agent. A nil Hooks is replaced with a no-op.
@@ -88,7 +93,7 @@ func New(cfg Config) *Agent {
 	if cfg.Hooks == nil {
 		cfg.Hooks = hooks.Nop{}
 	}
-	return &Agent{cfg: cfg, invoker: buildInvoker(cfg)}
+	return &Agent{cfg: cfg, invoker: buildInvoker(cfg), llm: buildLLM(cfg)}
 }
 
 // Snapshot returns the conversation history (for persistence).
@@ -120,7 +125,7 @@ func (a *Agent) Run(ctx context.Context, input string) error {
 			return err
 		}
 		a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.PreLLM})
-		result, err := a.cfg.Client.Stream(ctx, message.Request{
+		result, err := a.llm.Stream(ctx, message.Request{
 			Model:     a.cfg.Model,
 			MaxTokens: maxTokens,
 			System:    a.cfg.System,
@@ -187,7 +192,7 @@ func (a *Agent) shouldCompact() bool {
 func (a *Agent) compact(ctx context.Context) {
 	a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.PreCompact})
 	msgs := append(append([]message.Message{}, a.messages...), message.UserText(compactInstruction))
-	res, err := a.cfg.Client.Stream(ctx, message.Request{
+	res, err := a.llm.Stream(ctx, message.Request{
 		Model:     a.cfg.Model,
 		MaxTokens: compactMaxTokens,
 		System:    compactSystem,
