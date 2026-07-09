@@ -114,13 +114,14 @@ func runInit() {
 func runLayers() {
 	cfg := config.Load()
 	model := agent.ModelStack(agent.Config{TokenBudget: cfg.TokenBudget, LLMRetries: cfg.LLMRetries})
-	fmt.Println("model spine (outer → inner):")
+	fmt.Println("turn spine (outer → inner):")
+	fmt.Println("  " + strings.Join(agent.TurnStack(), " → "))
+	fmt.Println("\nmodel spine (outer → inner):")
 	fmt.Println("  " + strings.Join(model, " → "))
 	fmt.Println("\ntool spine (outer → inner):")
 	fmt.Println("  " + strings.Join(agent.ToolStack(), " → "))
 	fmt.Println("\nthe hooks layer fans out to the charter's guards, rules, and sinks")
 	fmt.Println("(canon plugin, .sigma/hooks.yaml, settings.json hooks, event log).")
-	fmt.Println("the turn spine is not yet layered (see docs/LAYERS.md).")
 }
 
 func runEval(args []string) {

@@ -86,6 +86,7 @@ type Agent struct {
 	lastInput int // input tokens of the most recent request
 	invoker   invoker
 	llm       LLM
+	turn      Turn
 }
 
 // New creates an agent. A nil Hooks is replaced with a no-op.
@@ -93,7 +94,9 @@ func New(cfg Config) *Agent {
 	if cfg.Hooks == nil {
 		cfg.Hooks = hooks.Nop{}
 	}
-	return &Agent{cfg: cfg, invoker: buildInvoker(cfg), llm: buildLLM(cfg)}
+	a := &Agent{cfg: cfg, invoker: buildInvoker(cfg), llm: buildLLM(cfg)}
+	a.turn = buildTurn(a)
+	return a
 }
 
 // Snapshot returns the conversation history (for persistence).
@@ -105,18 +108,15 @@ func (a *Agent) Restore(m []message.Message) { a.messages = m }
 // Reset clears the conversation history, starting a fresh session.
 func (a *Agent) Reset() { a.messages = nil }
 
-// Run processes one user input, looping through any tool calls until the model
-// produces a final answer.
+// Run processes one user input through the turn spine (compaction, prompt gate)
+// and the core loop.
 func (a *Agent) Run(ctx context.Context, input string) error {
-	// Compact prior history at the turn boundary (clean, no split tool pairs).
-	if a.shouldCompact() {
-		a.compact(ctx)
-	}
-	// UserPromptSubmit gate: a block rejects the prompt before any model call.
-	if o := a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.UserPrompt, Prompt: input}); o.Block {
-		a.cfg.UI.Text(promptRejected + o.Reason)
-		return nil
-	}
+	return a.turn(ctx, input)
+}
+
+// loop is the core turn: append the input, then drive the model/tool loop until
+// the model produces a final answer (or a gate/cap ends it).
+func (a *Agent) loop(ctx context.Context, input string) error {
 	a.messages = append(a.messages, message.UserText(input))
 
 	stopBlocks, respBlocks := 0, 0
