@@ -31,13 +31,16 @@ func runAgent(ctx context.Context, client agent.LLM, charter string, c Case) (Re
 	tr := &traceRecorder{}
 	var out strings.Builder
 	base := agent.Config{
-		Client:     client,
-		Permission: permission.ForMode(permission.Bypass, nil),
-		Hooks:      append(hooks.Multi{tr}, d.Bus), // capture the trace + run the charter's hooks/guards
-		Model:      d.Model,
-		System:     d.System,
-		CompactAt:  d.CompactAt,
-		UI:         &captureUI{b: &out},
+		Client:      client,
+		Permission:  permission.ForMode(permission.Bypass, nil),
+		Hooks:       append(hooks.Multi{tr}, d.Bus), // capture the trace + run the charter's hooks/guards
+		Model:       d.Model,
+		System:      d.System,
+		CompactAt:   d.CompactAt,
+		TokenBudget: d.TokenBudget,
+		LLMRetries:  d.LLMRetries,
+		ToolLayers:  d.ToolLayers,
+		UI:          &captureUI{b: &out},
 	}
 	newTools := func(root string) []tools.Tool {
 		if root == "" {

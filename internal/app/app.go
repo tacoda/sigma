@@ -51,6 +51,7 @@ type Deps struct {
 	Allowed     []string
 	TokenBudget int
 	LLMRetries  int
+	ToolLayers  []agent.ToolLayer
 	Cleanup     func()
 }
 
@@ -123,6 +124,11 @@ func Build(o Options) (*Deps, error) {
 		}
 	}
 
+	var toolLayers []agent.ToolLayer
+	for _, l := range host.ToolLayers {
+		toolLayers = append(toolLayers, l.Layer)
+	}
+
 	sb := cfg.Sandbox
 	newTools := func(root string) []tools.Tool {
 		var ex exec.Executor = exec.Local{Dir: root}
@@ -146,6 +152,7 @@ func Build(o Options) (*Deps, error) {
 		Allowed:     cfg.AllowedTools,
 		TokenBudget: cfg.TokenBudget,
 		LLMRetries:  cfg.LLMRetries,
+		ToolLayers:  toolLayers,
 		Cleanup:     cleanup,
 	}, nil
 }

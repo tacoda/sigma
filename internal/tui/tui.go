@@ -106,6 +106,7 @@ type Config struct {
 	CompactAt   int
 	TokenBudget int
 	LLMRetries  int
+	ToolLayers  []agent.ToolLayer
 	Resume      bool
 }
 
@@ -126,6 +127,7 @@ func Run(cfg Config) error {
 		CompactAt:   cfg.CompactAt,
 		TokenBudget: cfg.TokenBudget,
 		LLMRetries:  cfg.LLMRetries,
+		ToolLayers:  cfg.ToolLayers,
 	}
 	base.Tools = agent.WithSubagent(base, agent.SubagentOptions{
 		Tools:     cfg.NewTools,

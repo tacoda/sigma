@@ -51,7 +51,7 @@ func (t mutTool) Run(context.Context, json.RawMessage) (string, error) {
 }
 
 func invokeMut(cfg Config) (string, error) {
-	return buildInvoker(cfg).invoke(context.Background(), toolCall{name: "mut", input: json.RawMessage(`{}`)})
+	return buildInvoker(cfg).Invoke(context.Background(), ToolCall{Name: "mut", Input: json.RawMessage(`{}`)})
 }
 
 func TestToolSpineNormalOrder(t *testing.T) {
@@ -113,6 +113,29 @@ func TestToolSpinePermissionDeny(t *testing.T) {
 	}
 }
 
+func TestToolSpineExtraLayerIsOutermost(t *testing.T) {
+	var log []string
+	ran := false
+	rec := func(next Invoker) Invoker {
+		return InvokerFunc(func(ctx context.Context, c ToolCall) (string, error) {
+			log = append(log, "layer")
+			return next.Invoke(ctx, c)
+		})
+	}
+	if _, err := invokeMut(Config{
+		Tools:      tools.NewRegistry(mutTool{&ran}),
+		UI:         logUI{&log},
+		Hooks:      logBus{log: &log},
+		Permission: spyPerm{allow: true},
+		ToolLayers: []ToolLayer{rec},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(log) == 0 || log[0] != "layer" {
+		t.Errorf("extra layer should be outermost (first): %v", log)
+	}
+}
+
 func TestToolSpineReadOnlyBypassesPermission(t *testing.T) {
 	var log []string
 	var runs int
@@ -122,7 +145,7 @@ func TestToolSpineReadOnlyBypassesPermission(t *testing.T) {
 		Hooks:      logBus{log: &log},
 		Permission: spyPerm{allow: false}, // would deny, but read-only bypasses
 	}
-	_, err := buildInvoker(cfg).invoke(context.Background(), toolCall{name: "noop", input: json.RawMessage(`{}`)})
+	_, err := buildInvoker(cfg).Invoke(context.Background(), ToolCall{Name: "noop", Input: json.RawMessage(`{}`)})
 	if err != nil || runs != 1 {
 		t.Errorf("read-only tool should run despite deny: err=%v runs=%d", err, runs)
 	}

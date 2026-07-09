@@ -19,8 +19,10 @@ import (
 	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/message"
 	"github.com/tacoda/sigma/internal/permission"
+	"github.com/tacoda/sigma/internal/plugin"
 	_ "github.com/tacoda/sigma/internal/plugins/canon"      // register default plugin
 	_ "github.com/tacoda/sigma/internal/plugins/codehealth" // register built-in plugin
+	_ "github.com/tacoda/sigma/internal/plugins/dryrun"     // register built-in plugin
 	_ "github.com/tacoda/sigma/internal/plugins/stylepack"  // register built-in plugin
 	_ "github.com/tacoda/sigma/internal/plugins/telemetry"  // register built-in plugin
 	"github.com/tacoda/sigma/internal/scaffold"
@@ -118,8 +120,16 @@ func runLayers() {
 	fmt.Println("  " + strings.Join(agent.TurnStack(), " → "))
 	fmt.Println("\nmodel spine (outer → inner):")
 	fmt.Println("  " + strings.Join(model, " → "))
+	spine := agent.ToolStack()
+	if host, err := plugin.Mount(cfg.Plugins, cfg.DisablePlugins, cfg.PluginConfig); err == nil {
+		var extra []string
+		for _, l := range host.ToolLayers {
+			extra = append(extra, l.Name)
+		}
+		spine = append(extra, spine...) // plugin layers are outermost
+	}
 	fmt.Println("\ntool spine (outer → inner):")
-	fmt.Println("  " + strings.Join(agent.ToolStack(), " → "))
+	fmt.Println("  " + strings.Join(spine, " → "))
 	fmt.Println("\nthe hooks layer fans out to the charter's guards, rules, and sinks")
 	fmt.Println("(canon plugin, .sigma/hooks.yaml, settings.json hooks, event log).")
 }
@@ -303,6 +313,7 @@ func runAgent(args []string) {
 		CompactAt:   d.CompactAt,
 		TokenBudget: d.TokenBudget,
 		LLMRetries:  d.LLMRetries,
+		ToolLayers:  d.ToolLayers,
 	}
 	base.Tools = agent.WithSubagent(base, agent.SubagentOptions{
 		Tools:     d.NewTools,
@@ -345,6 +356,7 @@ func runChat(args []string) {
 		CompactAt:   d.CompactAt,
 		TokenBudget: d.TokenBudget,
 		LLMRetries:  d.LLMRetries,
+		ToolLayers:  d.ToolLayers,
 		Resume:      resume,
 	}
 	if err := tui.Run(cfg); err != nil {

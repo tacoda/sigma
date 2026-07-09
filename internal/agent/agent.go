@@ -77,6 +77,9 @@ type Config struct {
 	TokenBudget int
 	// LLMRetries retries a failed model call this many times (model spine). 0 = off.
 	LLMRetries int
+	// ToolLayers are extra tool-spine layers (from plugins/charter), applied
+	// outermost in order.
+	ToolLayers []ToolLayer
 }
 
 // Agent holds conversation state across turns.
@@ -84,7 +87,7 @@ type Agent struct {
 	cfg       Config
 	messages  []message.Message
 	lastInput int // input tokens of the most recent request
-	invoker   invoker
+	invoker   Invoker
 	llm       LLM
 	turn      Turn
 }
@@ -211,7 +214,7 @@ func (a *Agent) compact(ctx context.Context) {
 func (a *Agent) runTools(ctx context.Context, uses []message.Block) []message.Block {
 	results := make([]message.Block, 0, len(uses))
 	for _, use := range uses {
-		out, err := a.invoker.invoke(ctx, toolCall{name: use.Name, input: use.Input})
+		out, err := a.invoker.Invoke(ctx, ToolCall{Name: use.Name, Input: use.Input})
 		results = append(results, toolResult(use.ID, out, err))
 	}
 	return results

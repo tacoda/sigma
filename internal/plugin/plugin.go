@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/tacoda/sigma/internal/agent"
 	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/prompt"
 	"github.com/tacoda/sigma/internal/tools"
@@ -20,16 +21,29 @@ import (
 // Config is a plugin's raw JSON configuration (nil if none was provided).
 type Config = json.RawMessage
 
+// NamedToolLayer is a tool-spine layer with a name (for introspection).
+type NamedToolLayer struct {
+	Name  string
+	Layer agent.ToolLayer
+}
+
 // Host collects what mounted plugins contribute.
 type Host struct {
-	Tools   []tools.Tool
-	Sources []prompt.Source
-	Hooks   []hooks.Bus
+	Tools      []tools.Tool
+	Sources    []prompt.Source
+	Hooks      []hooks.Bus
+	ToolLayers []NamedToolLayer
 }
 
 func (h *Host) AddTool(t tools.Tool)      { h.Tools = append(h.Tools, t) }
 func (h *Host) AddSource(s prompt.Source) { h.Sources = append(h.Sources, s) }
 func (h *Host) AddHook(b hooks.Bus)       { h.Hooks = append(h.Hooks, b) }
+
+// AddToolLayer contributes a named tool-spine layer, applied outermost in
+// contribution order.
+func (h *Host) AddToolLayer(name string, l agent.ToolLayer) {
+	h.ToolLayers = append(h.ToolLayers, NamedToolLayer{Name: name, Layer: l})
+}
 
 // Plugin is an optional bundle of contributions. Register receives the plugin's
 // config (may be nil).

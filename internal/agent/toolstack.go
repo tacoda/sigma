@@ -17,34 +17,43 @@ import (
 // so a hook block skips permission and execution, and a permission deny skips
 // execution, PostToolUse, and the UI result — matching the pre-layer behavior.
 
-type toolCall struct {
-	name  string
-	input json.RawMessage
+// ToolCall is a request to run a tool, flowing through the tool spine.
+type ToolCall struct {
+	Name  string
+	Input json.RawMessage
 }
 
-type invoker interface {
-	invoke(ctx context.Context, c toolCall) (string, error)
+// Invoker runs a tool call. Layers wrap it.
+type Invoker interface {
+	Invoke(ctx context.Context, c ToolCall) (string, error)
 }
 
-type invokerFunc func(ctx context.Context, c toolCall) (string, error)
+// InvokerFunc adapts a function to Invoker (for layer authors).
+type InvokerFunc func(ctx context.Context, c ToolCall) (string, error)
 
-func (f invokerFunc) invoke(ctx context.Context, c toolCall) (string, error) { return f(ctx, c) }
+func (f InvokerFunc) Invoke(ctx context.Context, c ToolCall) (string, error) { return f(ctx, c) }
 
-type toolLayer func(next invoker) invoker
+// ToolLayer wraps an Invoker with cross-cutting behavior. Plugins and charters
+// contribute these; a layer may observe, transform, short-circuit, or wrap.
+type ToolLayer func(next Invoker) Invoker
 
-// buildInvoker composes the tool spine for a config.
-func buildInvoker(cfg Config) invoker {
+// buildInvoker composes the tool spine: the built-in stack, then any extra
+// layers (from plugins/charter) wrapping it outermost, in order.
+func buildInvoker(cfg Config) Invoker {
 	inv := execLayer(cfg.Tools)
-	// outermost first; applied inner -> outer.
-	stack := []toolLayer{
+	builtin := []ToolLayer{
 		uiCall(cfg.UI),
 		preHook(cfg.Hooks),
 		permissionLayer(cfg.Tools, cfg.Permission),
 		uiResult(cfg.UI),
 		postHook(cfg.Hooks),
 	}
-	for i := len(stack) - 1; i >= 0; i-- {
-		inv = stack[i](inv)
+	for i := len(builtin) - 1; i >= 0; i-- {
+		inv = builtin[i](inv)
+	}
+	// cfg.ToolLayers[0] is the outermost wrapper.
+	for i := len(cfg.ToolLayers) - 1; i >= 0; i-- {
+		inv = cfg.ToolLayers[i](inv)
 	}
 	return inv
 }
@@ -55,51 +64,51 @@ func ToolStack() []string {
 	return []string{"ui", "hooks", "permission", "exec"}
 }
 
-func execLayer(reg *tools.Registry) invoker {
-	return invokerFunc(func(ctx context.Context, c toolCall) (string, error) {
-		return reg.Run(ctx, c.name, c.input)
+func execLayer(reg *tools.Registry) Invoker {
+	return InvokerFunc(func(ctx context.Context, c ToolCall) (string, error) {
+		return reg.Run(ctx, c.Name, c.Input)
 	})
 }
 
-func uiCall(ui UI) toolLayer {
-	return func(next invoker) invoker {
-		return invokerFunc(func(ctx context.Context, c toolCall) (string, error) {
-			ui.ToolCall(c.name, string(c.input))
-			return next.invoke(ctx, c)
+func uiCall(ui UI) ToolLayer {
+	return func(next Invoker) Invoker {
+		return InvokerFunc(func(ctx context.Context, c ToolCall) (string, error) {
+			ui.ToolCall(c.Name, string(c.Input))
+			return next.Invoke(ctx, c)
 		})
 	}
 }
 
-func uiResult(ui UI) toolLayer {
-	return func(next invoker) invoker {
-		return invokerFunc(func(ctx context.Context, c toolCall) (string, error) {
-			out, err := next.invoke(ctx, c)
-			ui.ToolResult(c.name, out, err != nil)
+func uiResult(ui UI) ToolLayer {
+	return func(next Invoker) Invoker {
+		return InvokerFunc(func(ctx context.Context, c ToolCall) (string, error) {
+			out, err := next.Invoke(ctx, c)
+			ui.ToolResult(c.Name, out, err != nil)
 			return out, err
 		})
 	}
 }
 
 // preHook emits PreToolUse; a blocking outcome short-circuits with errBlocked.
-func preHook(bus hooks.Bus) toolLayer {
-	return func(next invoker) invoker {
-		return invokerFunc(func(ctx context.Context, c toolCall) (string, error) {
-			if o := bus.Emit(ctx, hooks.Event{Kind: hooks.PreTool, Tool: c.name, Input: string(c.input)}); o.Block {
+func preHook(bus hooks.Bus) ToolLayer {
+	return func(next Invoker) Invoker {
+		return InvokerFunc(func(ctx context.Context, c ToolCall) (string, error) {
+			if o := bus.Emit(ctx, hooks.Event{Kind: hooks.PreTool, Tool: c.Name, Input: string(c.Input)}); o.Block {
 				return o.Reason, errBlocked
 			}
-			return next.invoke(ctx, c)
+			return next.Invoke(ctx, c)
 		})
 	}
 }
 
 // postHook emits PostToolUse (and ToolError on failure) after execution.
-func postHook(bus hooks.Bus) toolLayer {
-	return func(next invoker) invoker {
-		return invokerFunc(func(ctx context.Context, c toolCall) (string, error) {
-			out, err := next.invoke(ctx, c)
-			bus.Emit(ctx, hooks.Event{Kind: hooks.PostTool, Tool: c.name, Output: out})
+func postHook(bus hooks.Bus) ToolLayer {
+	return func(next Invoker) Invoker {
+		return InvokerFunc(func(ctx context.Context, c ToolCall) (string, error) {
+			out, err := next.Invoke(ctx, c)
+			bus.Emit(ctx, hooks.Event{Kind: hooks.PostTool, Tool: c.Name, Output: out})
 			if err != nil {
-				bus.Emit(ctx, hooks.Event{Kind: hooks.ToolError, Tool: c.name, Output: out})
+				bus.Emit(ctx, hooks.Event{Kind: hooks.ToolError, Tool: c.Name, Output: out})
 			}
 			return out, err
 		})
@@ -108,13 +117,13 @@ func postHook(bus hooks.Bus) toolLayer {
 
 // permissionLayer denies a mutating tool the policy rejects. A read-only tool or
 // a nil policy passes through.
-func permissionLayer(reg *tools.Registry, p PermissionPolicy) toolLayer {
-	return func(next invoker) invoker {
-		return invokerFunc(func(ctx context.Context, c toolCall) (string, error) {
-			if !reg.ReadOnly(c.name) && p != nil && !p.Allow(c.name, string(c.input)) {
+func permissionLayer(reg *tools.Registry, p PermissionPolicy) ToolLayer {
+	return func(next Invoker) Invoker {
+		return InvokerFunc(func(ctx context.Context, c ToolCall) (string, error) {
+			if !reg.ReadOnly(c.Name) && p != nil && !p.Allow(c.Name, string(c.Input)) {
 				return "", errDenied
 			}
-			return next.invoke(ctx, c)
+			return next.Invoke(ctx, c)
 		})
 	}
 }
