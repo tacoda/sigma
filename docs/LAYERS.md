@@ -75,7 +75,7 @@ Context / prompt assembly folds into a model-path layer (it transforms the `Requ
 
 ## Phasing
 
-- **L0 — Tool spine.** Extract `Invoker` + `ToolLayer`; move permission, canon guards, rooting, sandbox, and the PreTool/PostTool/ToolError emits out of `runTools` into an ordered stack the agent composes once. Behavior-preserving; golden test green. Ship `sigma layers` for this spine.
+- **L0 — Tool spine.** ✅ Extracted `invoker` + `toolLayer` (internal/agent/toolstack.go): `runTools` now dispatches through a composed stack `ui → hooks → permission → exec` (UI split into call/result and hooks into pre/post so block/deny semantics are exact). `sigma layers` prints the spine. Canon guards/rooting/sandbox already ride the hooks/tool/exec seams. Behavior-preserving; golden green.
 - **L1 — Model spine.** `LLMLayer`; re-express prompt-cache, compaction, response-gate, and eval record/replay as layers; add token-budget and retry. `app.Build`/eval build the model stack.
 - **L2 — Turn spine.** `TurnLayer`; session, worktree, stop-gate, compaction-trigger as turn layers.
 - **L3 — Layers as first-class extension.** `plugin.Host.Add*Layer`; charter-declared order + config; a couple of net-new layers (dry-run, budget) to prove the seam; A/B a stack via eval.

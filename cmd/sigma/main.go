@@ -70,6 +70,8 @@ func main() {
 		runChat(os.Args[2:])
 	case "eval":
 		runEval(os.Args[2:])
+	case "layers":
+		runLayers()
 	default:
 		usage()
 		os.Exit(2)
@@ -89,7 +91,8 @@ commands:
                            (--yes auto-approves all tool calls)
   chat [--resume]          interactive multi-turn TUI session
                            (--resume continues the saved session)
-  eval <experiment.yaml>   run an A/B eval experiment (replay by default)`)
+  eval <experiment.yaml>   run an A/B eval experiment (replay by default)
+  layers                   print the middleware layer stack`)
 }
 
 func runInit() {
@@ -105,6 +108,14 @@ func runInit() {
 	for _, p := range created {
 		fmt.Println("created", p)
 	}
+}
+
+func runLayers() {
+	fmt.Println("tool spine (outer → inner):")
+	fmt.Println("  " + strings.Join(agent.ToolStack(), " → "))
+	fmt.Println("\nthe hooks layer fans out to the charter's guards, rules, and sinks")
+	fmt.Println("(canon plugin, .sigma/hooks.yaml, settings.json hooks, event log).")
+	fmt.Println("model and turn spines are not yet layered (see docs/LAYERS.md).")
 }
 
 func runEval(args []string) {

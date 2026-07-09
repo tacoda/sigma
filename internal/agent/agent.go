@@ -80,6 +80,7 @@ type Agent struct {
 	cfg       Config
 	messages  []message.Message
 	lastInput int // input tokens of the most recent request
+	invoker   invoker
 }
 
 // New creates an agent. A nil Hooks is replaced with a no-op.
@@ -87,7 +88,7 @@ func New(cfg Config) *Agent {
 	if cfg.Hooks == nil {
 		cfg.Hooks = hooks.Nop{}
 	}
-	return &Agent{cfg: cfg}
+	return &Agent{cfg: cfg, invoker: buildInvoker(cfg)}
 }
 
 // Snapshot returns the conversation history (for persistence).
@@ -200,27 +201,12 @@ func (a *Agent) compact(ctx context.Context) {
 	a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.PostCompact})
 }
 
-// runTools executes each requested tool and returns the tool_result blocks.
+// runTools dispatches each requested tool through the tool spine and returns the
+// tool_result blocks.
 func (a *Agent) runTools(ctx context.Context, uses []message.Block) []message.Block {
 	results := make([]message.Block, 0, len(uses))
 	for _, use := range uses {
-		input := string(use.Input)
-		a.cfg.UI.ToolCall(use.Name, input)
-
-		if o := a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.PreTool, Tool: use.Name, Input: input}); o.Block {
-			results = append(results, toolResult(use.ID, o.Reason, errBlocked))
-			continue
-		}
-		if !a.cfg.Tools.ReadOnly(use.Name) && !a.cfg.Permission.Allow(use.Name, input) {
-			results = append(results, toolResult(use.ID, "", errDenied))
-			continue
-		}
-		out, err := a.cfg.Tools.Run(ctx, use.Name, use.Input)
-		a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.PostTool, Tool: use.Name, Output: out})
-		if err != nil {
-			a.cfg.Hooks.Emit(ctx, hooks.Event{Kind: hooks.ToolError, Tool: use.Name, Output: out})
-		}
-		a.cfg.UI.ToolResult(use.Name, out, err != nil)
+		out, err := a.invoker.invoke(ctx, toolCall{name: use.Name, input: use.Input})
 		results = append(results, toolResult(use.ID, out, err))
 	}
 	return results
