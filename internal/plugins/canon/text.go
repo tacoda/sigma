@@ -80,8 +80,8 @@ Follow this canon in all work. It is the floor, not a suggestion.
 - Run on error budgets, not zero-defect fantasy; automate away toil (Google SRE). Fast feedback and managing complexity are the two pillars of the discipline (Farley).
 
 ## Commits & workflow
-- Conventional Commits: <type>(<scope>): <subject> (feat, fix, refactor, test, docs, chore). One logical change per commit; separate structural from behavioral commits.
-- Commit messages explain why, not what — the diff says what. Stage specific files, not git add . .
+- Conventional Commits: <type>(<scope>): <subject> (feat, fix, refactor, test, docs, chore). One logical change per commit; separate structural from behavioral commits. (guarded)
+- Commit messages explain why, not what — the diff says what. Stage specific files, not git add . . (guarded)
 - Branch from the up-to-date main; rebase, don't merge; keep branches short-lived. Every commit is releasable (Humble & Farley).
 - Use the project's task runner (make / just) over raw toolchain commands, so the environment stays consistent.
 - No debugging artifacts in committed code (console.log, debugger, dd(, binding.pry). (guarded)

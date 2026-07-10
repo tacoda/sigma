@@ -41,7 +41,11 @@ func (guards) Emit(_ context.Context, ev hooks.Event) hooks.Outcome {
 	}
 	switch ev.Tool {
 	case "bash":
-		if reason := dangerousCommand(field(ev.Input, "command")); reason != "" {
+		cmd := field(ev.Input, "command")
+		if reason := dangerousCommand(cmd); reason != "" {
+			return block(reason)
+		}
+		if reason := commitPolicy(cmd); reason != "" {
 			return block(reason)
 		}
 	case "read_file":
@@ -82,6 +86,10 @@ var (
 	pipeShellRe   = regexp.MustCompile(`(curl|wget)\b.*\|\s*(sudo\s+)?(ba)?sh`)
 	rmRfRe        = regexp.MustCompile(`\brm\s+-[a-zA-Z]*[rf][a-zA-Z]*\s`)
 	attributionRe = regexp.MustCompile(`(?i)co-authored-by|generated with|ai-generated|\bclaude\b`)
+	gitAddAllRe   = regexp.MustCompile(`git\s+add\s+(-A|--all|\.)(\s|$)`)
+	commitMsgRe   = regexp.MustCompile(`git\s+commit\b[^|;&]*?-m\s+(?:"([^"]*)"|'([^']*)')`)
+	convCommitRe  = regexp.MustCompile(`^(feat|fix|refactor|test|docs|chore|perf|build|ci|style|revert)(\([^)]+\))?!?: .+`)
+	mergeMsgRe    = regexp.MustCompile(`^(Merge |Revert |fixup!|squash!)`)
 
 	secretRes = []*regexp.Regexp{
 		regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
@@ -118,6 +126,28 @@ func dangerousCommand(cmd string) string {
 		return "no AI attribution in commits — the author is the human running the harness"
 	}
 	return ""
+}
+
+// commitPolicy enforces the git workflow canon: stage specific files, and use
+// Conventional Commits. It only inspects an inline -m message (editor/heredoc
+// commits are left alone).
+func commitPolicy(cmd string) string {
+	if gitAddAllRe.MatchString(cmd) {
+		return "stage specific files, not everything (avoid git add . / -A / --all)"
+	}
+	m := commitMsgRe.FindStringSubmatch(cmd)
+	if m == nil {
+		return ""
+	}
+	subject := m[1]
+	if subject == "" {
+		subject = m[2]
+	}
+	subject = strings.SplitN(strings.TrimSpace(subject), "\n", 2)[0] // first line only
+	if subject == "" || convCommitRe.MatchString(subject) || mergeMsgRe.MatchString(subject) {
+		return ""
+	}
+	return "use Conventional Commits: type(scope): subject (e.g. feat(x): add y)"
 }
 
 func scanContent(content string) string {

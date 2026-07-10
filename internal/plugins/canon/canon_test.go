@@ -48,6 +48,9 @@ func TestGuardsBlockViolations(t *testing.T) {
 		{"no-verify", "bash", in(map[string]string{"command": "git commit --no-verify -m x"})},
 		{"ai attribution", "bash", in(map[string]string{"command": "git commit -m 'feat: x\n\nCo-Authored-By: bot'"})},
 		{"rm -rf", "bash", in(map[string]string{"command": "rm -rf build/"})},
+		{"git add .", "bash", in(map[string]string{"command": "git add ."})},
+		{"git add -A", "bash", in(map[string]string{"command": "git add -A"})},
+		{"non-conventional commit", "bash", in(map[string]string{"command": `git commit -m "fixed the thing"`})},
 	}
 	for _, tc := range blocked {
 		if o := emit(tc.tool, tc.input); !o.Block {
@@ -64,6 +67,9 @@ func TestGuardsAllowNormal(t *testing.T) {
 		{"normal read", "read_file", in(map[string]string{"path": "internal/x.go"})},
 		{"normal bash", "bash", in(map[string]string{"command": "go test ./..."})},
 		{"clean commit", "bash", in(map[string]string{"command": "git commit -m 'feat(x): add F'"})},
+		{"stage specific", "bash", in(map[string]string{"command": "git add internal/x.go"})},
+		{"merge commit", "bash", in(map[string]string{"command": `git commit -m "Merge branch main"`})},
+		{"editor commit", "bash", in(map[string]string{"command": "git commit"})},
 	}
 	for _, tc := range allowed {
 		if o := emit(tc.tool, tc.input); o.Block {
