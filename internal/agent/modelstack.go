@@ -17,7 +17,7 @@ import (
 //
 // Note: PreLLMRequest/PostLLMResponse emits and the response gate stay in the
 // turn loop — the gate acts on the PostLLM outcome, which the LLM interface
-// (result + error only) can't carry. Prompt caching lives in the anthropic
+// (result + error only) can't carry. Prompt caching lives in the provider
 // adapter. Those are turn-spine / adapter concerns, not model layers.
 
 type LLMLayer func(LLM) LLM

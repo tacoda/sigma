@@ -3,7 +3,7 @@
 // request/result values the LLM port exchanges.
 //
 // It is domain data — no transport, HTTP, or provider concern lives here. The
-// anthropic adapter (and any future provider) converts between these types and
+// openai adapter (and any future provider) converts between these types and
 // the wire.
 package message
 

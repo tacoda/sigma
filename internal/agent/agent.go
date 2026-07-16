@@ -55,7 +55,7 @@ type PermissionPolicy interface {
 	Allow(name, detail string) bool
 }
 
-// LLM is the model port: send a request, stream the response. *anthropic.Client
+// LLM is the model port: send a request, stream the response. *openai.Client
 // satisfies it; tests supply a fake.
 type LLM interface {
 	Stream(ctx context.Context, req message.Request, onText func(string)) (*message.Result, error)
