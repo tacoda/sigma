@@ -27,7 +27,7 @@ import (
 )
 
 // DefaultModel drives the coding agent when the charter sets none.
-const DefaultModel = "claude-sonnet-4-6"
+const DefaultModel = "gpt-4o"
 
 // Options parameterize a build.
 type Options struct {

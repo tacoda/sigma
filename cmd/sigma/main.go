@@ -1,5 +1,5 @@
-// Command sigma is a coding-agent CLI authenticated with Claude Code
-// subscription credentials.
+// Command sigma is a coding-agent CLI authenticated with an OpenAI API key
+// (OPENAI_API_KEY in the environment).
 package main
 
 import (
@@ -11,13 +11,12 @@ import (
 	"strings"
 
 	"github.com/tacoda/sigma/internal/agent"
-	"github.com/tacoda/sigma/internal/anthropic"
 	"github.com/tacoda/sigma/internal/app"
-	"github.com/tacoda/sigma/internal/auth"
 	"github.com/tacoda/sigma/internal/config"
 	"github.com/tacoda/sigma/internal/eval"
 	"github.com/tacoda/sigma/internal/hooks"
 	"github.com/tacoda/sigma/internal/message"
+	"github.com/tacoda/sigma/internal/openai"
 	"github.com/tacoda/sigma/internal/permission"
 	"github.com/tacoda/sigma/internal/plugin"
 	_ "github.com/tacoda/sigma/internal/plugins/canon"      // register default plugin
@@ -53,7 +52,7 @@ func (consoleUI) Usage(int, int) {}
 const version = "0.0.1"
 
 // authModel is cheap; used for the auth smoke test and the eval judge.
-const authModel = "claude-haiku-4-5-20251001"
+const authModel = "gpt-4o-mini"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -87,9 +86,8 @@ func usage() {
 commands:
   version            print version
   init               scaffold a starter .sigma/ config and examples
-  auth test          verify Claude Code credentials with a live API call
-  auth status        show credential status without calling the API
-  auth refresh       force an OAuth token refresh
+  auth test          verify OPENAI_API_KEY with a live API call
+  auth status        show whether OPENAI_API_KEY is set
   run [--yes] <prompt...>  run the coding agent on a one-shot prompt
                            (--yes auto-approves all tool calls)
   chat [--resume]          interactive multi-turn TUI session
@@ -200,7 +198,7 @@ func usesJudge(exp *eval.Experiment) bool {
 	return false
 }
 
-func loadClient() *anthropic.Client {
+func loadClient() *openai.Client {
 	c, err := tryLoadClient()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -209,17 +207,14 @@ func loadClient() *anthropic.Client {
 	return c
 }
 
-// tryLoadClient loads credentials without exiting, for callers that can degrade
+// tryLoadClient reads the API key without exiting, for callers that can degrade
 // (e.g. the eval judge scorer).
-func tryLoadClient() (*anthropic.Client, error) {
-	creds, err := auth.Load()
-	if err != nil {
-		return nil, fmt.Errorf("load credentials: %w", err)
+func tryLoadClient() (*openai.Client, error) {
+	key := os.Getenv("OPENAI_API_KEY")
+	if key == "" {
+		return nil, fmt.Errorf("OPENAI_API_KEY not set in environment")
 	}
-	if err := auth.EnsureValid(creds); err != nil {
-		return nil, fmt.Errorf("credentials expired and refresh failed: %w", err)
-	}
-	return anthropic.New(creds.AccessToken), nil
+	return openai.New(key), nil
 }
 
 func runAuth(args []string) {
@@ -229,34 +224,17 @@ func runAuth(args []string) {
 	}
 	switch sub {
 	case "status":
-		creds, err := auth.Load()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "load credentials:", err)
+		if os.Getenv("OPENAI_API_KEY") == "" {
+			fmt.Fprintln(os.Stderr, "OPENAI_API_KEY not set in environment")
 			os.Exit(1)
 		}
-		fmt.Printf("ok: subscription=%s scopes=%v expired=%v\n",
-			creds.SubscriptionType, creds.Scopes, creds.Expired())
+		fmt.Println("ok: OPENAI_API_KEY set")
 	case "test":
 		authTest()
-	case "refresh":
-		refreshCreds()
 	default:
 		usage()
 		os.Exit(2)
 	}
-}
-
-func refreshCreds() {
-	creds, err := auth.Load()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "load credentials:", err)
-		os.Exit(1)
-	}
-	if err := creds.Refresh(); err != nil {
-		fmt.Fprintln(os.Stderr, "refresh failed:", err)
-		os.Exit(1)
-	}
-	fmt.Println("ok: token refreshed and saved")
 }
 
 func authTest() {
